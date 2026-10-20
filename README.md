@@ -24,20 +24,11 @@ docker compose up
 - The app: http://localhost:3000
 - Mailpit, which catches both emails: http://localhost:8025
 
-One `up` builds the image, waits for Postgres, runs the migration, seeds 10 mentors with some pre-booked classes, and serves the API and the built web app. The seed fills one stretch two days out, so London, New York and Los Angeles each see a fully booked day, and one popular hour five or more days out, which shows as "Full" among open hours.
-
-Every published port is bound to `127.0.0.1` (app 3000, Mailpit 8025 and 1025, Postgres 5433), because the database uses the well-known `bookings`/`bookings` credentials. `localhost` URLs work. To show the app from another machine, drop the `127.0.0.1:` prefix on the app port in `docker-compose.yml`.
-
-On a database volume kept from an earlier day, reset first for a fresh demo (see [How to reset](#how-to-reset)).
+One `up` builds the image, waits for Postgres, runs the migration, seeds 10 mentors, and serves the API and the built web app. The seed pre-books a fully booked day and a full hour, so those states show at once.
 
 ## Seeing the clock changes live
 
-London's clocks go back on Sun 25 Oct 2026 and New York's on Sun 1 Nov 2026. To see both inside the 14-day window, run `docker compose down -v`, then `DEMO_NOW=2026-10-20T12:00:00Z docker compose up`:
-
-```bash
-docker compose down -v
-DEMO_NOW=2026-10-20T12:00:00Z docker compose up
-```
+London's clocks go back on Sun 25 Oct 2026 and New York's on Sun 1 Nov 2026. To see both inside the 14-day window, run `docker compose down -v`, then `DEMO_NOW=2026-10-20T12:00:00Z docker compose up`.
 
 The server clock starts at `DEMO_NOW` and keeps ticking, and the seed books around it. Both list endpoints return `demo: true`, and the booking and mentors pages show a banner such as "Demo clock: it's Tue 20 Oct 2026, 1:00 PM in London", so a fake "today" can't mislead.
 
@@ -58,10 +49,10 @@ docker compose run --rm --build test
 
 The `--build` matters: the test service sits under a profile, so `docker compose up --build` never rebuilds it.
 
-Or run `npm test` on the host (Node 22.18 or later) with `db` and `mailpit` up:
+Or run `npm test` on the host (Node 22.18 or later) with `db` up:
 
 ```bash
-docker compose up -d db mailpit
+docker compose up -d db
 npm ci
 npm test
 ```
@@ -98,6 +89,8 @@ Environment variables, with the values compose sets and the defaults in `src/ser
 
 Compose passes `DEMO_NOW` through from the shell (`DEMO_NOW: ${DEMO_NOW:-}`). A value that isn't an ISO instant with an offset stops the server at boot.
 
+Every published port is bound to `127.0.0.1` (app 3000, Mailpit 8025 and 1025, Postgres 5433), because the database uses the well-known `bookings`/`bookings` credentials. `localhost` URLs work. To show the app from another machine, drop the `127.0.0.1:` prefix on the app port in `docker-compose.yml`.
+
 To run the server on the host instead of in a container: `docker compose stop app`, then `npm ci && npm run build && npm start`.
 
 ## API reference
@@ -111,7 +104,7 @@ All JSON. Every `/api` response sends `Cache-Control: no-store`. Errors always h
 | Code | Status | When |
 |---|---|---|
 | `VALIDATION_FAILED` | 400 | the body fails validation, isn't JSON, is too large or can't be read |
-| `SLOT_UNAVAILABLE` | 409 | a well-formed request for a time that can't be booked now: every mentor for that hour is taken or at their cap, the time is under 2 hours away, or nobody works then |
+| `SLOT_UNAVAILABLE` | 409 | a well-formed request for a time that can't be booked now: it is outside the booking window (2 hours to 14 days ahead) or nobody is free |
 | `NOT_FOUND` | 404 | no such booking, or no such `/api` endpoint |
 | `INTERNAL` | 500 | anything else; the message is generic and the details are logged |
 
@@ -146,7 +139,7 @@ Body: `{ startsAt, parentName, parentEmail, childName, parentTimeZone }`.
 - `startsAt`: an ISO-8601 instant with an offset (`Z` or `+05:30`), exactly on the UTC hour.
 - `parentName`, `childName`: trimmed, 1–80 characters, no control characters and no line or paragraph separators.
 - `parentEmail`: a valid address, at most 254 characters.
-- `parentTimeZone`: an IANA name that `Intl` accepts and that is `UTC` or contains a `/`.
+- `parentTimeZone`: at most 64 characters, an IANA name that `Intl` accepts and that is `UTC` or contains a `/`.
 
 Returns `201 { booking }`. Both emails go out after the response.
 
@@ -168,7 +161,7 @@ curl -s -X POST localhost:3000/api/bookings -H 'content-type: application/json' 
     "classLink": "https://classroom.example/trial/dcfb4423-1c2f-4c6b-8b14-eae79e1d2c68",
     "mentor": {
       "name": "Priya Sharma",
-      "bio": "Turns first lines of code and tricky fractions into small wins that make a child want to try the next one.",
+      "bio": "…",
       "subjects": ["Coding", "Math"],
       "timeZone": "Asia/Kolkata"
     }
@@ -246,7 +239,7 @@ curl -s localhost:3000/api/mentors
     {
       "id": 1,
       "name": "Priya Sharma",
-      "bio": "Turns first lines of code and tricky fractions into small wins that make a child want to try the next one.",
+      "bio": "…",
       "subjects": ["Coding", "Math"],
       "timeZone": "Asia/Kolkata",
       "bookings": [
@@ -273,7 +266,7 @@ T2: lock 7 → (waits for T1) → free at 16:00? yes → 2 < 2? no → ROLLBACK 
 
 `bookSlot` in `src/server/bookings.ts`:
 
-1. The time must be on the UTC hour and inside the booking window, or the answer is `SLOT_UNAVAILABLE`.
+1. The time must be on the UTC hour and inside the booking window (2 hours to 14 days ahead), or the answer is `SLOT_UNAVAILABLE`.
 2. Candidate mentors are those whose working hours cover the whole class. They are sorted by that day's active count, then by id. This pre-check only sets the order; it is not trusted.
 3. For each candidate, one short transaction at `READ COMMITTED`:
    1. `select id from mentors where id = $1 for update`: the turnstile.
@@ -330,9 +323,10 @@ All conversions and display formats live in one dependency-free file, `src/share
 
 - **Instants only, in the database and on the wire.** Postgres uses `timestamptz`, and JSON carries ISO-8601 strings ending in `Z`. SQL never casts a `timestamptz` to a date. The class's date in the mentor's own time zone is computed in `time.ts` and stored as `mentor_local_date`, which is what the cap counts.
 - **Zones are IANA names**, never offsets or abbreviations. Each mentor has one, and each booking stores the parent's zone as chosen.
-- **Wall-clock time becomes an instant in one place** in the booking rules: turning a mentor's weekly working hours into instants for a given date (`zonedTimeToInstant`). Everything else goes from an instant to a display.
+- **Wall-clock time becomes an instant in one function** in the booking rules: turning a mentor's weekly working hours into instants for a given date (`zonedTimeToInstant`). Everything else goes from an instant to a display.
 - **The browser groups slots into the parent's local days.** The server sends a flat list of instants, so changing the zone regroups at once, with no refetch.
-- **One display style everywhere**: "Tue 27 Oct, 4:00 PM BST (London)", "9:30 PM IST (Kolkata)", "11:00 AM EST (New York)". The abbreviation is the name people use there: the first of `en-US`, `en-GB`, `en-IE`, `en-IN`, `en-CA`, `en-AU` that gives a name rather than an offset form. An `en-US` formatter calls London's summer time "GMT+1", and only `en-GB` says "BST". If no locale has a name, the offset form is used ("GMT+9" for Tokyo). The city always follows, because "IST" is both Dublin's summer time and India's.
+- **One display style everywhere**, in the UI and the emails: "Fri 23 Oct, 4:00 PM BST (London)", "9:30 PM IST (Kolkata)", "11:00 AM EST (New York)".
+- **The abbreviation is the name people use there:** the first of `en-US`, `en-GB`, `en-IE`, `en-IN`, `en-CA`, `en-AU` that gives a name rather than an offset form. An `en-US` formatter calls London's summer time "GMT+1", and only `en-GB` says "BST". If no locale has a name, the offset form is used ("GMT+9" for Tokyo). The city always follows, because "IST" is both Dublin's summer time and India's.
 - **One clock: the app's.** Only `createClock` reads the real time, and pure functions take `now`. The browser takes "today" from the `now` in each list response, so a wrong device clock can't make the page and the server disagree. SQL never calls `now()` in a business query.
 - **The host's time zone never matters.** No local-time `Date` methods anywhere (`getHours`, `getDate`, `setHours`, `toLocaleString` without a `timeZone`). The three-zone test run checks it.
 - **Zones are validated by trying them**, and must be `UTC` or an `Area/Location` name. Trying alone isn't enough: ICU accepts "IST" and maps it to India, and maps "EST" to a fixed UTC−5.
@@ -402,7 +396,7 @@ This is the same rule as Temporal's default disambiguation (`'compatible'`).
 
 ### Where the build goes beyond the spec
 
-- **Three host zones, not two.** The suite runs under `TZ=UTC`, `TZ=Pacific/Chatham` and `TZ=America/Los_Angeles`, because a local-time getter on a UTC-midnight value passes UTC and Chatham but fails Los Angeles.
+- **The suite runs under three host zones, not two** (see [Tests](#tests)).
 - **The other side's time carries its date when the days differ.** The parent's "where it's …" line and the mentor's "For the family: …" line add the date whenever the two sides fall on different calendar days, which is every US evening class: "For the family: Mon 26 Oct, 5:00 PM EDT in New York". Same-day text is unchanged ("9:30 PM IST").
 - **The 409 alert names the zone:** "Sorry, 1:00 AM BST on Sun 25 Oct is no longer available." The abbreviation tells the two 1:00 AMs apart on the clock-change day.
 - **Body read errors are 400s.** An oversized body or an unknown `Content-Encoding` returns `400 VALIDATION_FAILED`, not 500. A malformed JSON body was already a 400.
@@ -432,23 +426,16 @@ docs/superpowers/
   plans/2026-10-21-trial-booking.md          the implementation plan
 src/shared/
   time.ts                   every time-zone conversion and display format
-  time.test.ts
   types.ts                  API request and response types for server and web
 src/server/
   main.ts                   entry: migrate, seed, listen
   app.ts                    createClock and createApp: routes, validation, errors, static files
   bookings.ts               data access and the bookSlot transaction
-  bookings.test.ts
   slots.ts                  pure slot rules: working hours to class starts, availability, the cap
-  slots.test.ts
   email.ts                  email rendering and the SMTP mailer
-  email.test.ts
   seed.ts                   10 mentors, their hours, the pre-booked classes
-  seed.test.ts
   db.ts                     pool, date parsing and the migration runner
-  db.test.ts
   test-db.ts                test helpers: a throwaway database per file, insertMentor
-  api.test.ts
 src/web/
   main.tsx                  React entry and the query client
   App.tsx                   header and the path switch for the three pages
@@ -457,11 +444,12 @@ src/web/
   MentorsPage.tsx           mentors with booked times in each mentor's own time zone
   ui.tsx                    Card, Progress, DemoBanner and other small pieces
   booking.ts                pure browser logic: day grouping, alternatives, zone options, the flow reducer
-  booking.test.ts
   api.ts                    typed fetch client
   hooks.ts                  useTimeZone, useSlots, useBookSlot
   index.css                 Tailwind and the @theme tokens
 ```
+
+Each `*.test.ts` sits beside the module it tests (see [Tests](#tests)).
 
 ## How to reset
 

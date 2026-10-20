@@ -137,7 +137,7 @@ export function formatZone(at: Date, tz: string): string {
   return `${zoneAbbreviation(at, tz)} (${cityName(tz)})`;
 }
 
-/** 'Tue 27 Oct, 4:00 PM BST (London)', the display style used in the UI and the emails. */
+/** 'Fri 23 Oct, 4:00 PM BST (London)', the display style used in the UI and the emails. */
 export function formatWhen(at: Date, tz: string): string {
   return `${formatDate(at, tz)}, ${formatTime(at, tz)} ${formatZone(at, tz)}`;
 }
