@@ -691,7 +691,7 @@ Environment variables, documented in the README with the compose defaults:
   - **seeing the clock changes live**: `docker compose down -v`, then
     `DEMO_NOW=2026-10-20T12:00:00Z docker compose up`. The demo clock starts again from `DEMO_NOW`
     whenever the app restarts;
-  - tests (`docker compose run --rm test`);
+  - tests (`docker compose run --rm --build test`; `--build` because the test service sits under a profile and `up --build` never rebuilds it);
   - configuration;
   - API reference (section 8, with example requests);
   - how bookings stay correct (section 6, including READ COMMITTED);

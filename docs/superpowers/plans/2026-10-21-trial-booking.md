@@ -1640,7 +1640,7 @@ git commit -m "feat(docker): one compose up migrates, seeds and serves; add test
 - [ ] **Step 2: Final verification**
 
 Run: `npm run typecheck && docker compose down -v && docker compose up --build -d --wait && docker compose run --rm --build test`
-Expected: exit 0, and both test runs pass. Then click through `/`, a confirmation page and `/mentors` at `localhost:3000`, once without and once with `DEMO_NOW`.
+Expected: exit 0, and all three test runs pass. Then click through `/`, a confirmation page and `/mentors` at `localhost:3000`, once without and once with `DEMO_NOW`.
 
 - [ ] **Step 3: Commit**
 
