@@ -2,7 +2,7 @@ import { expect, test } from 'vitest';
 import { addDays } from '../shared/time.ts';
 import type { SlotDto } from '../shared/types.ts';
 import {
-  clockChange, dayMixesOffsets, flowReducer, groupIntoDays, initialFlow, initialTimeZone, mentorDays, nearestOpenDays,
+  clockChange, dayMixesOffsets, dayStatus, flowReducer, groupIntoDays, initialFlow, initialTimeZone, mentorDays, nearestOpenDays,
   nearestOpenTimes, sameZone, shownDayKey, zoneOptions,
 } from './booking.ts';
 
@@ -25,6 +25,12 @@ test('each repeated 1:00 AM lands on its own change day', () => {
 test('openCount ignores full hours', () => {
   const [today] = groupIntoDays([slot('2026-10-20T15:00:00Z'), slot('2026-10-20T16:00:00Z', false)], 'Europe/London', NOW);
   expect(today!.openCount).toBe(1);
+});
+
+test('dayStatus tells an open day from a fully booked one and from one with no times at all', () => {
+  const slots = [slot('2026-10-20T15:00:00Z'), slot('2026-10-20T16:00:00Z', false), slot('2026-10-21T15:00:00Z', false)];
+  const [open, full, none] = groupIntoDays(slots, 'Europe/London', NOW); // 20, 21 and 22 Oct
+  expect([open, full, none].map((d) => dayStatus(d!))).toEqual(['open', 'full', 'none']);
 });
 
 test('shownDayKey: the selected time, then the chosen day, then the first open day', () => {

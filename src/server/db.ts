@@ -37,7 +37,7 @@ export async function migrate(pool: pg.Pool): Promise<string[]> {
         await client.query('insert into schema_migrations (name) values ($1)', [name]);
         await client.query('commit');
       } catch (err) {
-        await client.query('rollback');
+        await client.query('rollback').catch(() => {});
         throw err;
       }
       applied.push(name);

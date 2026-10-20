@@ -44,7 +44,7 @@ services:
       mailpit: { condition: service_started }
     # lets `docker compose up --wait` return only once the app is serving
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/slots"]
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://localhost:3000/api/slots"]
       interval: 2s
       retries: 30
 

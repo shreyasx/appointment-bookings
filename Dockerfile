@@ -21,4 +21,5 @@ COPY src/shared ./src/shared
 COPY src/server ./src/server
 COPY --from=build /app/dist/web ./dist/web
 EXPOSE 3000
+USER node
 CMD ["node", "src/server/main.ts"]

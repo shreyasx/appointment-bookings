@@ -3,7 +3,7 @@ import { flushSync } from 'react-dom';
 import { cityName, formatDate, formatDayKey, formatTime, isValidTimeZone, localDate, zoneAbbreviation } from '../shared/time.ts';
 import { ApiError } from './api.ts';
 import {
-  clockChange, DAYS_SHOWN, dayMixesOffsets, flowReducer, groupIntoDays, initialFlow, nearestOpenDays, nearestOpenTimes, sameZone,
+  clockChange, DAYS_SHOWN, dayMixesOffsets, dayStatus, flowReducer, groupIntoDays, initialFlow, nearestOpenDays, nearestOpenTimes, sameZone,
   shownDayKey, zoneOptions, type Day, type Details,
 } from './booking.ts';
 import { useBookSlot, useSlots, useTimeZone } from './hooks.ts';
@@ -22,9 +22,13 @@ export function BookingPage() {
   const [state, dispatch] = useReducer(flowReducer, initialFlow);
   const { timeZone, setTimeZone, deviceTimeZone } = useTimeZone();
   const { data, error, isFetching, refetch } = useSlots();
+  const unavailableAlert = useRef<HTMLDivElement>(null);
   const book = useBookSlot((startsAt) => {
-    dispatch({ type: 'daySelected', dayKey: localDate(new Date(startsAt), timeZone) }); // stay on that day, even if it is now full
-    dispatch({ type: 'slotUnavailable', startsAt });
+    flushSync(() => {
+      dispatch({ type: 'daySelected', dayKey: localDate(new Date(startsAt), timeZone) }); // stay on that day, even if it is now full
+      dispatch({ type: 'slotUnavailable', startsAt });
+    });
+    unavailableAlert.current?.focus(); // Confirm is disabled now, which drops focus to the page
   });
   // TanStack tells React about a pending mutation after a setTimeout(0), so a quick second click lands before the button disables
   const sending = useRef(false);
@@ -35,7 +39,8 @@ export function BookingPage() {
   useEffect(() => {
     if (focusedStep.current === state.step) return; // the first load leaves focus alone
     focusedStep.current = state.step;
-    heading.current?.focus();
+    // a 400 bounces back to step 1: start at the first field to fix
+    (document.querySelector<HTMLElement>('input[aria-invalid]') ?? heading.current)?.focus();
   }, [state.step]);
 
   const frame = (children: ReactNode) => (
@@ -172,6 +177,7 @@ export function BookingPage() {
 
       {state.unavailable && (
         <UnavailableAlert
+          ref={unavailableAlert}
           startsAt={state.unavailable}
           alternatives={nearestOpenTimes(shownSlots, state.unavailable)}
           timeZone={timeZone}
@@ -183,7 +189,9 @@ export function BookingPage() {
         />
       )}
       {bookError && !(bookError instanceof ApiError && bookError.status === 409) && !hasDetailErrors(bookError) && (
-        <p role="alert" className="mt-4 text-sm text-alert">{bookError.message}</p>
+        <p role="alert" className="mt-4 text-sm text-alert">
+          {fieldErrors(bookError).parentTimeZone ? 'Please pick your time zone from the list.' : bookError.message}
+        </p>
       )}
 
       <button
@@ -214,7 +222,7 @@ function DetailsForm({ details, errors, onSubmit }: { details: Details; errors: 
   return (
     <form onSubmit={submit} className="mt-4 flex flex-col gap-4">
       <Field name="parentName" label="Parent's name" autoComplete="name" defaultValue={details.parentName} error={errors.parentName} />
-      <Field name="parentEmail" label="Parent's email" type="email" autoComplete="email" defaultValue={details.parentEmail} error={errors.parentEmail} />
+      <Field name="parentEmail" label="Parent's email" type="email" autoComplete="email" maxLength={254} defaultValue={details.parentEmail} error={errors.parentEmail} />
       <Field name="childName" label="Child's name" autoComplete="off" defaultValue={details.childName} error={errors.childName} />
       <button type="submit" className={`mt-2 ${primaryButton}`}>Choose a time</button>
     </form>
@@ -227,11 +235,11 @@ function Field({ name, label, error, ...input }: { name: keyof Details; label: s
     <div>
       <label htmlFor={id} className="mb-1 block text-sm font-medium">{label}</label>
       <input
+        maxLength={80}
         {...input}
         id={id}
         name={name}
         required
-        maxLength={80}
         aria-invalid={error ? true : undefined}
         aria-describedby={error ? `${id}-error` : undefined}
         className="w-full rounded-field border border-field bg-white p-3 text-base aria-invalid:border-alert"
@@ -272,14 +280,15 @@ function DayChips({ days, value, rowRef, onChange }: { days: Day[]; value: strin
         <div ref={rowRef} className="flex min-w-0 flex-1 scroll-smooth gap-2 overflow-x-auto p-1 motion-reduce:scroll-auto">
           {days.map((d) => {
             const [weekday, ...date] = formatDayKey(d.key).split(' ');
+            const status = dayStatus(d);
             return (
               <label key={d.key} className="relative shrink-0">
                 <input type="radio" name="day" value={d.key} checked={d.key === value} onChange={() => onChange(d.key)} className="peer sr-only" />
-                <span className={`flex w-18 cursor-pointer flex-col overflow-hidden rounded-field border border-field text-center peer-checked:border-brand peer-checked:bg-brand-100 ${d.openCount ? 'bg-white' : 'bg-full text-ink-soft'} ${peerRing}`}>
+                <span className={`flex w-18 cursor-pointer flex-col overflow-hidden rounded-field border border-field text-center peer-checked:border-ink peer-checked:bg-brand-100 ${d.openCount ? 'bg-white' : 'bg-full text-ink-soft'} ${peerRing}`}>
                   <span className="pt-2 text-xs">{weekday}</span>{' '}
                   <span className="pb-2 font-bold">{date.join(' ')}</span>{' '}
                   <span className={`py-1 text-xs ${d.openCount ? 'bg-brand-50' : ''}`}>
-                    {d.openCount === 0 ? 'Full' : d.openCount === 1 ? '1 slot' : `${d.openCount} slots`}
+                    {status === 'none' ? 'No slots' : status === 'full' ? 'Full' : d.openCount === 1 ? '1 slot' : `${d.openCount} slots`}
                   </span>
                 </span>
               </label>
@@ -313,7 +322,7 @@ function SlotGrid({ day, timeZone, selected, onSelect }: { day: Day; timeZone: s
                 onChange={() => onSelect(s.startsAt)}
                 className="peer sr-only"
               />
-              <span className={`flex cursor-pointer flex-col items-center rounded-field border border-field bg-white py-3 text-sm font-medium peer-checked:border-brand peer-checked:bg-brand peer-checked:font-bold peer-disabled:cursor-not-allowed peer-disabled:border-line peer-disabled:bg-full peer-disabled:text-ink-soft ${peerRing}`}>
+              <span className={`flex cursor-pointer flex-col items-center rounded-field border border-field bg-white py-3 text-sm font-medium peer-checked:border-ink peer-checked:bg-brand peer-checked:font-bold peer-disabled:cursor-not-allowed peer-disabled:border-line peer-disabled:bg-full peer-disabled:text-ink-soft ${peerRing}`}>
                 {formatTime(at, timeZone)}{showZone && ` ${zoneAbbreviation(at, timeZone)}`}
                 {!s.available && <>{' '}<span className="text-xs">Full</span></>}
               </span>
@@ -329,9 +338,14 @@ function SlotGrid({ day, timeZone, selected, onSelect }: { day: Day; timeZone: s
 function EmptyDay({ days, dayKey, onJump }: { days: Day[]; dayKey: string; onJump: (dayKey: string) => void }) {
   const { before, after } = nearestOpenDays(days, dayKey);
   const nearest = [before, after].filter((d) => d !== null);
+  const full = dayStatus(days.find((d) => d.key === dayKey)!) === 'full';
   return (
     <div className="mt-4 rounded-field bg-full p-4 text-sm">
-      <p className="font-bold">Every mentor is booked on {formatDayKey(dayKey)}.</p>
+      <p className="font-bold">
+        {full
+          ? `Every mentor is booked on ${formatDayKey(dayKey)}.`
+          : dayKey === days[0]!.key ? 'No times are left today.' : `There are no times on ${formatDayKey(dayKey)}.`}
+      </p>
       {nearest.length ? (
         <>
           <p className="mt-1">The nearest days with open times:</p>
@@ -350,12 +364,12 @@ function EmptyDay({ days, dayKey, onJump }: { days: Day[]; dayKey: string; onJum
   );
 }
 
-function UnavailableAlert({ startsAt, alternatives, timeZone, shownKey, onPick }: {
-  startsAt: string; alternatives: string[]; timeZone: string; shownKey: string; onPick: (startsAt: string) => void;
+function UnavailableAlert({ ref, startsAt, alternatives, timeZone, shownKey, onPick }: {
+  ref: RefObject<HTMLDivElement | null>; startsAt: string; alternatives: string[]; timeZone: string; shownKey: string; onPick: (startsAt: string) => void;
 }) {
   const at = new Date(startsAt);
   return (
-    <div role="alert" className="mt-4 rounded-field border border-alert bg-alert-50 p-4 text-sm">
+    <div ref={ref} role="alert" tabIndex={-1} className="mt-4 rounded-field border border-alert bg-alert-50 p-4 text-sm">
       <p className="font-bold text-alert">
         Sorry, {formatTime(at, timeZone)} {zoneAbbreviation(at, timeZone)} on {formatDate(at, timeZone)} is no longer available.
       </p>

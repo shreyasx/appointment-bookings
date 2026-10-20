@@ -26,6 +26,12 @@ export function groupIntoDays(slots: SlotDto[], tz: string, now: Date): Day[] {
   return days;
 }
 
+/** 'full' when every time that day is taken, 'none' when it has no times at all (today after the 2-hour lead, or a day nobody works). */
+export function dayStatus(day: Day): 'open' | 'full' | 'none' {
+  if (day.slots.length === 0) return 'none';
+  return day.openCount === 0 ? 'full' : 'open';
+}
+
 /** The day to show: the selected time's own day (it must stay on screen after a zone change), else the chosen day, else the first open one. */
 export function shownDayKey(days: Day[], selected: string | null, chosenDay: string | null, tz: string): string {
   const has = (key: string) => days.some((d) => d.key === key);
