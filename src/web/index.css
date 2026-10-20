@@ -24,8 +24,10 @@
     @apply bg-page text-ink antialiased;
   }
 
+  /* ink, not brand, carries the 3:1 contrast WCAG 1.4.11 asks of a focus ring (brand on white is 1.78:1); the brand halo fills the gap */
   :focus-visible {
-    outline: 3px solid var(--color-brand);
+    outline: 2px solid var(--color-ink);
     outline-offset: 2px;
+    box-shadow: 0 0 0 4px var(--color-brand);
   }
 }

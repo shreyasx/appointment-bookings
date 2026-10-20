@@ -22,7 +22,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(503, 'INTERNAL', "We can't reach the server. Check your connection and try again.");
   }
   const body: unknown = await res.json().catch(() => null);
-  if (res.ok) return body as T;
+  if (res.ok) {
+    if (body === null) throw new ApiError(502, 'INTERNAL', 'Unexpected response from the server.'); // 200 with HTML, say a misrouted proxy
+    return body as T;
+  }
   const error = (body as ApiErrorBody | null)?.error;
   throw new ApiError(res.status, error?.code ?? 'INTERNAL', error?.message ?? 'Something went wrong. Please try again.', error?.fields);
 }

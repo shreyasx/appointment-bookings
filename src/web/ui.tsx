@@ -5,6 +5,18 @@ export function Card({ children }: { children: ReactNode }) {
   return <div className="mx-auto w-full max-w-[440px] rounded-card border border-line bg-white p-8 shadow-card">{children}</div>;
 }
 
+/** Every primary button: full width, 14px bold, 16px vertical padding. */
+export const primaryButton = 'block w-full rounded-cta bg-brand py-4 text-center text-sm font-bold text-ink';
+
+export function NotFoundCard({ title }: { title: string }) {
+  return (
+    <Card>
+      <h1 className="text-2xl font-medium">{title}</h1>
+      <a href="/" className="mt-4 inline-block font-bold underline underline-offset-4">Back to the home page</a>
+    </Card>
+  );
+}
+
 export function CardTitle() {
   return (
     <h1 className="text-2xl font-medium">

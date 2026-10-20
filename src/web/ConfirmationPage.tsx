@@ -1,21 +1,17 @@
 import { useQuery } from '@tanstack/react-query';
 import { cityName, formatDateWithYear, formatOtherTime, formatSpan } from '../shared/time.ts';
 import { ApiError, getBooking } from './api.ts';
-import { Avatar, Card, Progress } from './ui.tsx';
+import { Avatar, Card, NotFoundCard, primaryButton, Progress } from './ui.tsx';
 
 export function ConfirmationPage({ id }: { id: string }) {
   const { data, error } = useQuery({ queryKey: ['booking', id], queryFn: () => getBooking(id) });
 
   if (!data) {
+    if (error instanceof ApiError && error.status === 404) return <NotFoundCard title="We couldn't find that booking." />;
     return (
       <Card>
         {!error ? (
           <p role="status">Loading your booking…</p>
-        ) : error instanceof ApiError && error.status === 404 ? (
-          <>
-            <h1 className="text-2xl font-medium">We couldn't find that booking.</h1>
-            <a href="/" className="mt-4 inline-block font-bold underline underline-offset-4">Back to the home page</a>
-          </>
         ) : (
           <p role="alert" className="text-alert">We couldn't load your booking. Please refresh the page to try again.</p>
         )}
@@ -55,7 +51,7 @@ export function ConfirmationPage({ id }: { id: string }) {
         href={b.classLink}
         target="_blank"
         rel="noreferrer"
-        className="mt-6 block w-full rounded-cta bg-brand py-4 text-center text-sm font-bold text-ink"
+        className={`mt-6 ${primaryButton}`}
       >
         Join class
       </a>
