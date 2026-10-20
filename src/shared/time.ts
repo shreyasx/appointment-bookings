@@ -7,8 +7,8 @@ function formatter(locale: string, timeZone: string, options: Intl.DateTimeForma
   const key = `${locale}|${timeZone}|${JSON.stringify(options)}`;
   let f = formatters.get(key);
   if (!f) {
+    f = new Intl.DateTimeFormat(locale, { ...options, timeZone }); // throws on a junk zone, before the cache is touched
     if (formatters.size > 500) formatters.clear(); // ponytail: clear-all past 500 entries; an LRU if real zones ever churn
-    f = new Intl.DateTimeFormat(locale, { ...options, timeZone });
     formatters.set(key, f);
   }
   return f;
@@ -75,4 +75,92 @@ export function zonedTimeToInstant(date: string, time: string, tz: string): Date
     .filter((t) => offsetMinutes(new Date(t), tz) * 60_000 === wall - t);
   // repeated hour: two valid instants, take the earlier; gap: none valid, move forward by the gap
   return new Date(valid.length ? Math.min(...valid) : wall - early * 60_000);
+}
+
+/** 'GMT', 'GMT+1', 'GMT+5:30', 'GMT-4' for an offset in minutes. */
+export function formatOffset(minutes: number): string {
+  if (minutes === 0) return 'GMT';
+  const abs = Math.abs(minutes);
+  const rest = abs % 60 ? `:${String(abs % 60).padStart(2, '0')}` : '';
+  return `GMT${minutes < 0 ? '-' : '+'}${Math.floor(abs / 60)}${rest}`;
+}
+
+/** The name people there use for the zone at `at` ('BST', 'IST', 'EDT'), or 'GMT+9' when no English locale names it. */
+export function zoneAbbreviation(at: Date, tz: string): string {
+  // ponytail: six English locales cover the zones we serve; add a per-zone map if one picks a wrong name
+  for (const locale of ['en-US', 'en-GB', 'en-IE', 'en-IN', 'en-CA', 'en-AU']) {
+    const name = formatter(locale, tz, { timeZoneName: 'short' })
+      .formatToParts(at)
+      .find((p) => p.type === 'timeZoneName')?.value;
+    if (name && !/^(GMT|UTC)[+-]/.test(name)) return name;
+  }
+  return formatOffset(offsetMinutes(at, tz));
+}
+
+const CITY_ALIASES: Record<string, string> = {
+  'Asia/Calcutta': 'Kolkata',
+  'Europe/Kiev': 'Kyiv',
+  'Asia/Saigon': 'Ho Chi Minh City',
+};
+
+export function cityName(tz: string): string {
+  return CITY_ALIASES[tz] ?? tz.slice(tz.lastIndexOf('/') + 1).replaceAll('_', ' ');
+}
+
+/** ICU's own spelling of a zone, so 'Asia/Kolkata' and 'Asia/Calcutta' compare equal. */
+export function canonicalTimeZone(tz: string): string {
+  return formatter('en', tz, {}).resolvedOptions().timeZone;
+}
+
+/** '4:00 PM', with a plain space where ICU puts a narrow no-break one. */
+export function formatTime(at: Date, tz: string): string {
+  return formatter('en-US', tz, { hour: 'numeric', minute: '2-digit' }).format(at).replace(/\u202f/g, ' ');
+}
+
+/** 'Tue 27 Oct' */
+export function formatDate(at: Date, tz: string): string {
+  return formatter('en-GB', tz, { weekday: 'short', day: 'numeric', month: 'short' }).format(at);
+}
+
+/** 'Tue 27 Oct 2026' (en-GB would put a comma after the weekday if asked for the year too) */
+export function formatDateWithYear(at: Date, tz: string): string {
+  return `${formatDate(at, tz)} ${formatter('en-GB', tz, { year: 'numeric' }).format(at)}`;
+}
+
+/** A 'YYYY-MM-DD' calendar day as 'Sun 25 Oct'. */
+export function formatDayKey(key: string): string {
+  return formatDate(new Date(`${key}T12:00:00Z`), 'UTC');
+}
+
+/** 'BST (London)' */
+export function formatZone(at: Date, tz: string): string {
+  return `${zoneAbbreviation(at, tz)} (${cityName(tz)})`;
+}
+
+/** 'Tue 27 Oct, 4:00 PM BST (London)', the display style used in the UI and the emails. */
+export function formatWhen(at: Date, tz: string): string {
+  return `${formatDate(at, tz)}, ${formatTime(at, tz)} ${formatZone(at, tz)}`;
+}
+
+/** '4:00–5:00 PM GMT (London)'; names both zones when a clock change falls inside the span. */
+export function formatSpan(start: Date, end: Date, tz: string): string {
+  const from = formatTime(start, tz);
+  const to = formatTime(end, tz);
+  const city = cityName(tz);
+  if (offsetMinutes(start, tz) !== offsetMinutes(end, tz)) {
+    return `${from} ${zoneAbbreviation(start, tz)}–${to} ${zoneAbbreviation(end, tz)} (${city})`;
+  }
+  const samePeriod = from.slice(-2) === to.slice(-2); // 'AM' or 'PM'
+  return `${samePeriod ? from.slice(0, -3) : from}–${to} ${zoneAbbreviation(start, tz)} (${city})`;
+}
+
+/** 'London (GMT+1)', the label in the zone picker. */
+export function formatZoneOption(at: Date, tz: string): string {
+  return `${cityName(tz)} (${formatOffset(offsetMinutes(at, tz))})`;
+}
+
+/** The time in `tz` for a reader in `viewerTz`: '9:30 PM IST', with the date when the two sides are on different days. */
+export function formatOtherTime(at: Date, tz: string, viewerTz: string): string {
+  const time = `${formatTime(at, tz)} ${zoneAbbreviation(at, tz)}`;
+  return localDate(at, tz) === localDate(at, viewerTz) ? time : `${formatDate(at, tz)}, ${time}`;
 }
