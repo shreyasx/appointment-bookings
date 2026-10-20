@@ -102,6 +102,21 @@ function buildZoneOptions(current: string, now: Date): ZoneOption[] {
   return options;
 }
 
+export type MentorDay = { key: string; times: string[]; atCap: boolean };
+
+/** A mentor's booked times grouped into the mentor's own days, in time order. `times` are the input strings, untouched. */
+export function mentorDays(bookings: { startsAt: string }[], tz: string): MentorDay[] {
+  const days = new Map<string, MentorDay>();
+  for (const { startsAt } of [...bookings].sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())) {
+    const key = localDate(new Date(startsAt), tz);
+    const day = days.get(key) ?? { key, times: [], atCap: false };
+    day.times.push(startsAt);
+    day.atCap = day.times.length >= 2;
+    days.set(key, day);
+  }
+  return [...days.values()];
+}
+
 /** The stored zone when it is still a real one, else the device's, else UTC, so a junk zone never reaches the Intl calls below. */
 export function initialTimeZone(stored: string | null, device: string): string {
   if (stored && isValidTimeZone(stored)) return stored;

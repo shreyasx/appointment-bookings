@@ -1,5 +1,6 @@
 import { BookingPage } from './BookingPage.tsx';
 import { ConfirmationPage } from './ConfirmationPage.tsx';
+import { MentorsPage } from './MentorsPage.tsx';
 import { NotFoundCard } from './ui.tsx';
 
 export function App() {
@@ -12,7 +13,15 @@ export function App() {
         <a href="/mentors" className="text-sm font-medium underline-offset-4 hover:underline">Our mentors</a>
       </header>
       <main className="px-4 pb-12">
-        {path === '/' ? <BookingPage /> : bookingId ? <ConfirmationPage id={bookingId} /> : <NotFoundCard title="We couldn't find that page." />}
+        {path === '/' ? (
+          <BookingPage />
+        ) : path === '/mentors' ? (
+          <MentorsPage />
+        ) : bookingId ? (
+          <ConfirmationPage id={bookingId} />
+        ) : (
+          <NotFoundCard title="We couldn't find that page." />
+        )}
       </main>
     </>
   );

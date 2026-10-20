@@ -2,7 +2,7 @@ import { expect, test } from 'vitest';
 import { addDays } from '../shared/time.ts';
 import type { SlotDto } from '../shared/types.ts';
 import {
-  clockChange, dayMixesOffsets, flowReducer, groupIntoDays, initialFlow, initialTimeZone, nearestOpenDays,
+  clockChange, dayMixesOffsets, flowReducer, groupIntoDays, initialFlow, initialTimeZone, mentorDays, nearestOpenDays,
   nearestOpenTimes, sameZone, shownDayKey, zoneOptions,
 } from './booking.ts';
 
@@ -107,4 +107,12 @@ test('flowReducer keeps details through a 409 and clears the selection', () => {
   expect(flowReducer(s, { type: 'slotSelected', startsAt: '2026-10-27T17:00:00Z' })).toMatchObject({ selected: '2026-10-27T17:00:00Z', unavailable: null });
   expect(flowReducer(s, { type: 'daySelected', dayKey: '2026-10-28' })).toMatchObject({ chosenDay: '2026-10-28', selected: null });
   expect(flowReducer(s, { type: 'back' })).toMatchObject({ step: 'details', details });
+});
+
+test("mentorDays groups by the mentor's own day and marks the cap", () => {
+  const days = mentorDays([{ startsAt: '2026-10-27T22:00:00Z' }, { startsAt: '2026-10-27T16:00:00Z' }, { startsAt: '2026-10-28T15:00:00Z' }], 'Asia/Kolkata');
+  expect(days).toEqual([
+    { key: '2026-10-27', times: ['2026-10-27T16:00:00Z'], atCap: false },
+    { key: '2026-10-28', times: ['2026-10-27T22:00:00Z', '2026-10-28T15:00:00Z'], atCap: true }, // 3:30 AM and 8:30 PM in Kolkata
+  ]);
 });
