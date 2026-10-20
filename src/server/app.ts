@@ -22,7 +22,7 @@ export function createClock(demoNow: string | undefined, realNow: () => number =
   return { now: () => new Date(realNow() + offset), demo: true };
 }
 
-const name = z.string().trim().min(1, 'Required').max(80).regex(/^[^\p{Cc}]*$/u, 'No line breaks or control characters');
+const name = z.string().trim().min(1, 'Required').max(80).regex(/^[^\p{Cc}\p{Zl}\p{Zp}]*$/u, 'No line breaks or control characters');
 const bookingBody = z.object({
   startsAt: z.iso.datetime({ offset: true }).transform((s) => new Date(s)).refine((d) => d.getTime() % HOUR_MS === 0, 'Must start on the UTC hour'),
   parentName: name,
@@ -82,10 +82,14 @@ export function createApp(deps: {
     if (!found) throw new Error(`booking ${result.booking.id} is missing right after it was made`);
     res.status(201).json({ booking: toDto(found) });
 
-    // after the response, so a mail failure never fails a booking
-    const { parent, mentor } = renderEmails({ ...found.booking, mentor: found.mentor }, appUrl);
-    const sends = await Promise.allSettled([parent, mentor].map(async (message) => mailer.send(message)));
-    for (const send of sends) if (send.status === 'rejected') log('could not send a booking email', send.reason);
+    // after the response, so a mail failure never fails a booking; the catch keeps a render error away from Express's default handler
+    try {
+      const { parent, mentor } = renderEmails({ ...found.booking, mentor: found.mentor }, appUrl);
+      const sends = await Promise.allSettled([parent, mentor].map(async (message) => mailer.send(message)));
+      for (const send of sends) if (send.status === 'rejected') log('could not send a booking email', send.reason);
+    } catch (err) {
+      log('could not prepare the booking emails', err);
+    }
   });
 
   app.get('/api/bookings/:id', async (req, res) => {
@@ -127,7 +131,11 @@ export function createApp(deps: {
       for (const issue of err.issues) fields[issue.path.join('.')] ??= issue.message;
       return fail(res, 'VALIDATION_FAILED', 'Some details need fixing.', fields);
     }
-    if ((err as { type?: unknown }).type === 'entity.parse.failed') return fail(res, 'VALIDATION_FAILED', 'The request body is not valid JSON.');
+    // body-parser's client errors (bad JSON, too large, unknown encoding) carry a string type and a 4xx status; sendFile's ENOENT has only a status
+    const { type, status } = err as { type?: unknown; status?: unknown };
+    if (typeof type === 'string' && typeof status === 'number' && status >= 400 && status < 500) {
+      return fail(res, 'VALIDATION_FAILED', type === 'entity.parse.failed' ? 'The request body is not valid JSON.' : 'The request could not be read.');
+    }
     log('unhandled error', err);
     fail(res, 'INTERNAL', 'Something went wrong. Please try again.');
   });

@@ -53,6 +53,20 @@ test('rejects a body that is not JSON', async () => {
   expect([res.status, res.body.error.code]).toEqual([400, 'VALIDATION_FAILED']);
 });
 
+test('a body over the JSON limit is a 400, not a server error', async () => {
+  const log = vi.fn();
+  const quiet = createApp({ pool, clock, mailer, appUrl: '', log });
+  const res = await request(quiet).post('/api/bookings').send({ ...valid, parentName: 'x'.repeat(200_000) });
+  expect([res.status, res.body.error.code]).toEqual([400, 'VALIDATION_FAILED']);
+  expect(log).not.toHaveBeenCalled();
+});
+
+test('names with line or paragraph separators are rejected', async () => {
+  const res = await request(app).post('/api/bookings').send({ ...valid, parentName: 'As\u2029ha', childName: 'Ro\u2028han' });
+  expect(res.status).toBe(400);
+  expect(Object.keys(res.body.error.fields).sort()).toEqual(['childName', 'parentName']);
+});
+
 test('409 when nobody is left for that hour, or it is too soon', async () => {
   const at = { ...valid, startsAt: '2026-10-28T15:00:00Z' };
   await request(app).post('/api/bookings').send(at);
@@ -91,6 +105,12 @@ test('every /api response is no-store, and unknown routes are JSON 404s', async 
   expect([res.status, res.headers['cache-control'], res.body.error.code]).toEqual([404, 'no-store', 'NOT_FOUND']);
 });
 
+test('the booking is answered before any email settles', async () => {
+  const stuck = createApp({ pool, clock, appUrl: '', mailer: { send: () => new Promise<void>(() => {}) } }); // never settles
+  const res = await request(stuck).post('/api/bookings').send({ ...valid, startsAt: '2026-11-02T15:00:00Z' });
+  expect(res.status).toBe(201);
+});
+
 test('a failing mailer never fails the booking', async () => {
   const log = vi.fn();
   const broken = createApp({ pool, clock, appUrl: '', log, mailer: createSmtpMailer('smtp://127.0.0.1:9') }); // nothing listens on port 9
@@ -108,6 +128,7 @@ test('the app clock drives slots, booking and the mentors list', async () => {
   expect((await request(demo).post('/api/bookings').send({ ...valid, startsAt: '2026-10-15T15:00:00Z' })).status).toBe(201);
   const mentors = (await request(demo).get('/api/mentors')).body;
   expect(mentors.demo).toBe(true);
+  expect(mentors.now).toBe('2026-10-14T13:30:00.000Z');
   expect(mentors.mentors.flatMap((m: MentorDto) => m.bookings.map((b) => b.startsAt))).toContain('2026-10-15T15:00:00.000Z');
 });
 
