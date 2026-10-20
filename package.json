@@ -7,6 +7,8 @@
     "node": ">=22.18"
   },
   "scripts": {
+    "start": "node src/server/main.ts",
+    "dev:server": "node --watch src/server/main.ts",
     "test": "TZ=UTC vitest run && TZ=Pacific/Chatham vitest run && TZ=America/Los_Angeles vitest run",
     "typecheck": "tsc"
   },
