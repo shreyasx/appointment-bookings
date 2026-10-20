@@ -12,7 +12,7 @@ const queryClient = new QueryClient({
   },
 });
 
-// Safari restores the booking page from the back-forward cache after Back from the confirmation, with Confirm stuck on "Booking…"
+// Safari and Firefox may restore the booking page from the back-forward cache after Back from the confirmation, with Confirm stuck on "Booking…"
 addEventListener('pageshow', (e) => { if (e.persisted) location.reload(); });
 
 createRoot(document.getElementById('root')!).render(
