@@ -6,8 +6,9 @@ services:
       POSTGRES_PASSWORD: bookings
       POSTGRES_DB: bookings
       TZ: UTC
+    # every published port binds to localhost: the db has well-known credentials, so nothing is reachable from the LAN
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     # test files run in parallel and each race test opens up to 40 connections
     command: ["postgres", "-c", "max_connections=200"]
     healthcheck:
@@ -22,8 +23,39 @@ services:
     environment:
       TZ: UTC
     ports:
-      - "8025:8025"
-      - "1025:1025"
+      - "127.0.0.1:8025:8025"
+      - "127.0.0.1:1025:1025"
+
+  app:
+    build: { context: ., target: runtime }
+    # node as PID 1 ignores SIGTERM, so without an init `docker compose down` waits out the 10 s kill timeout
+    init: true
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      DATABASE_URL: postgres://bookings:bookings@db:5432/bookings
+      SMTP_URL: smtp://mailpit:1025
+      APP_URL: http://localhost:3000
+      PORT: "3000"
+      TZ: UTC
+      DEMO_NOW: ${DEMO_NOW:-}
+    depends_on:
+      db: { condition: service_healthy }
+      mailpit: { condition: service_started }
+    # lets `docker compose up --wait` return only once the app is serving
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/slots"]
+      interval: 2s
+      retries: 30
+
+  test:
+    build: { context: ., target: test }
+    profiles: [test]
+    environment:
+      DATABASE_URL: postgres://bookings:bookings@db:5432/bookings
+      TZ: UTC
+    depends_on:
+      db: { condition: service_healthy }
 
 volumes:
   db-data:
