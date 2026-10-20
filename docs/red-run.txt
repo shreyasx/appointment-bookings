@@ -1,0 +1,18 @@
+ FAIL  src/server/bookings.test.ts > cap race: the lock makes the second booking wait, then refuse
+AssertionError: expected [ …(2) ] to have a length of 1 but got 2
+
+- Expected
++ Received
+
+- 1
++ 2
+
+ ❯ src/server/bookings.test.ts:84:39
+     82|     bookSlot(pool, input('2026-10-27T17:00:00Z'), NOW, pause),
+     83|   ]);
+     84|   expect(results.filter((r) => r.ok)).toHaveLength(1);
+       |                                       ^
+     85|   const { rows } = await pool.query(`select count(*)::int as n from bo…
+     86|   expect(rows[0].n).toBe(2);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯

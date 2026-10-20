@@ -1,6 +1,10 @@
 import { randomBytes } from 'node:crypto';
 import type pg from 'pg';
+import { expect } from 'vitest';
+import { localDate } from '../shared/time.ts';
+import { loadMentors } from './bookings.ts';
 import { createPool, migrate } from './db.ts';
+import { DAILY_CAP, worksAt } from './slots.ts';
 
 export type TestDb = { pool: pg.Pool; drop(): Promise<void> };
 
@@ -47,4 +51,22 @@ export async function insertMentor(
     ]);
   }
   return id;
+}
+
+// The three promises the database must keep, however the requests interleaved. Tests call this after a burst.
+export async function expectBookingRulesHold(pool: pg.Pool): Promise<void> {
+  const doubled = await pool.query('select mentor_id, starts_at from bookings where cancelled_at is null group by mentor_id, starts_at having count(*) > 1');
+  expect(doubled.rows, 'a mentor booked twice in one hour').toEqual([]);
+  const over = await pool.query(
+    'select mentor_id, mentor_local_date from bookings where cancelled_at is null group by mentor_id, mentor_local_date having count(*) > $1',
+    [DAILY_CAP],
+  );
+  expect(over.rows, `a mentor over ${DAILY_CAP} classes in one of their own days`).toEqual([]);
+  const mentors = new Map((await loadMentors(pool)).map((m) => [m.id, m]));
+  const { rows } = await pool.query('select id, mentor_id, starts_at, mentor_local_date from bookings');
+  const wrong = rows.filter((r) => {
+    const mentor = mentors.get(r.mentor_id)!;
+    return !worksAt(mentor, r.starts_at) || r.mentor_local_date !== localDate(r.starts_at, mentor.timeZone);
+  });
+  expect(wrong, 'a booking outside working hours or with the wrong mentor-local date').toEqual([]);
 }
