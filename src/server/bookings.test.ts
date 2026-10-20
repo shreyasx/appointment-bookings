@@ -96,3 +96,13 @@ test('a random burst keeps every rule', async () => {
   expect(results.some((r) => r.ok)).toBe(true);
   await expectBookingRulesHold(pool);
 });
+
+test('orders candidates by active classes on that local day only', async () => {
+  const a = await insertMentor(pool, { timeZone: 'Asia/Kolkata', hours: ukHours });
+  await insertMentor(pool, { timeZone: 'Asia/Kolkata', hours: ukHours });
+  await bookSlot(pool, input('2026-10-28T15:00:00Z'), NOW); // a, on another local day
+  const first = await bookSlot(pool, input('2026-10-27T15:00:00Z'), NOW);
+  await pool.query('update bookings set cancelled_at = now() where id = $1', [first.ok && first.booking.id]);
+  const next = await bookSlot(pool, input('2026-10-27T16:00:00Z'), NOW);
+  expect([first, next].map((r) => r.ok && r.booking.mentorId)).toEqual([a, a]); // neither the other day nor the cancelled row counts
+});

@@ -84,13 +84,15 @@ export async function bookSlot(
   for (const { mentor, date } of candidates) {
     const client = await pool.connect();
     try {
-      await client.query('begin');
+      await client.query('begin isolation level read committed');
       await client.query('select id from mentors where id = $1 for update', [mentor.id]); // the turnstile: bookings for one mentor take turns (spec §6); relies on read committed
       const hour = await client.query('select 1 from bookings where mentor_id = $1 and starts_at = $2 and cancelled_at is null', [mentor.id, input.startsAt]);
-      const day = hour.rowCount
-        ? null
-        : await client.query('select count(*)::int as n from bookings where mentor_id = $1 and mentor_local_date = $2 and cancelled_at is null', [mentor.id, date]);
-      if (!day || day.rows[0].n >= DAILY_CAP) {
+      if (hour.rowCount) {
+        await client.query('rollback');
+        continue;
+      }
+      const day = await client.query('select count(*)::int as n from bookings where mentor_id = $1 and mentor_local_date = $2 and cancelled_at is null', [mentor.id, date]);
+      if (day.rows[0].n >= DAILY_CAP) {
         await client.query('rollback');
         continue;
       }
@@ -103,7 +105,7 @@ export async function bookSlot(
       await client.query('commit');
       return { ok: true, booking: toBooking(inserted[0]) };
     } catch (err) {
-      await client.query('rollback');
+      await client.query('rollback').catch(() => {}); // a dead connection cannot roll back; keep the first error
       if ((err as { code?: string }).code !== '23505') throw err; // 23505: the unique index caught a clash; try the next mentor
     } finally {
       client.release();

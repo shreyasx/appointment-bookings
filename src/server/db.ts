@@ -8,6 +8,9 @@ const MIGRATION_LOCK = 727001;
 
 export function createPool(connectionString: string, max?: number): pg.Pool {
   const pool = new pg.Pool({ connectionString, max });
+  // pg-pool stops listening for errors on a checked-out client; without this a dropped connection mid-transaction crashes the process.
+  // A query in flight already rejects with the error, and any later query on the dead client rejects too, so nothing is lost by ignoring the event.
+  pool.on('connect', (client) => client.on('error', () => {}));
   pool.on('error', (err: Error & { code?: string }) => {
     // 57P01: the server ended an idle connection, as a test teardown's `drop database ... with (force)` does.
     if (err.code !== '57P01') console.error('postgres pool error', err);
