@@ -65,9 +65,17 @@ export function BookingPage() {
     );
   }
 
+  // Back stays locked while a booking is in flight: resubmitting step 1 calls book.reset(), which drops this mutation's onError and would leave `sending` stuck
+  const busy = book.isPending || book.isSuccess;
   const header = (
     <div className="mt-6 flex items-center gap-1">
-      <button type="button" aria-label="Back to your details" onClick={() => dispatch({ type: 'back' })} className="-ml-2 rounded-field p-1 hover:bg-brand-50">
+      <button
+        type="button"
+        aria-label="Back to your details"
+        disabled={busy}
+        onClick={() => dispatch({ type: 'back' })}
+        className="-ml-2 rounded-field p-1 enabled:hover:bg-brand-50 disabled:cursor-not-allowed disabled:text-ink-soft"
+      >
         <Icon><path d="m12 19-7-7 7-7" /><path d="M19 12H5" /></Icon>
       </button>
       <h2 ref={heading} tabIndex={-1} className="text-lg font-bold">Pick a time</h2>
@@ -98,9 +106,13 @@ export function BookingPage() {
   // after a zone change the selected time can fall outside the 14 days shown; then nothing counts as selected
   const selected = shownSlots.some((s) => s.startsAt === state.selected) ? state.selected : null;
   const change = clockChange(days, timeZone, now);
-  const busy = book.isPending || book.isSuccess;
   const bookError = book.error;
   const deviceCity = cityName(deviceTimeZone);
+  // the shown day can move to a chip scrolled out of sight, leaving nothing on screen that names it
+  const changeZone = (tz: string) => {
+    flushSync(() => setTimeZone(tz));
+    dayRow.current?.querySelector('input:checked')?.parentElement?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  };
 
   const confirm = () => {
     if (!selected || sending.current) return;
@@ -120,11 +132,11 @@ export function BookingPage() {
     <>
       {header}
       <div className="mt-4">
-        <ZonePill timeZone={timeZone} now={now} onChange={setTimeZone} />
+        <ZonePill timeZone={timeZone} now={now} onChange={changeZone} />
         {isValidTimeZone(deviceTimeZone) && !sameZone(timeZone, deviceTimeZone) && (
           <p className="mt-2 text-sm text-ink-soft">
             Your device is set to {deviceCity} time.{' '}
-            <button type="button" onClick={() => setTimeZone(deviceTimeZone)} className="font-bold text-ink underline underline-offset-4">
+            <button type="button" onClick={() => changeZone(deviceTimeZone)} className="font-bold text-ink underline underline-offset-4">
               Use {deviceCity} time
             </button>
           </p>
