@@ -294,8 +294,8 @@ T2: lock 7 → (waits for T1) → free at 16:00? yes → 2 < 2? no → ROLLBACK 
    - No local-time `Date` methods anywhere (`getHours`, `getDate`, `setHours`, `toLocaleString`
      without a `timeZone`, …). Only `getTime`, `toISOString`, `Date.UTC` and `Intl` with an explicit
      `timeZone`.
-   - The time tests run twice, under `TZ=UTC` and `TZ=Pacific/Chatham` (UTC+12:45, with DST), to
-     prove it.
+   - The time tests run three times, under `TZ=UTC`, `TZ=Pacific/Chatham` (UTC+12:45, with DST)
+     and `TZ=America/Los_Angeles` (behind UTC, like every US parent's browser), to prove it.
 8. **Validate zones by trying them, and require an IANA-style name.**
    - Try `new Intl.DateTimeFormat('en-US', { timeZone })` inside a `try`. Never check membership in
      `Intl.supportedValuesOf('timeZone')`. Node's ICU still lists India as `Asia/Calcutta`, and
@@ -584,7 +584,7 @@ create index bookings_mentor_day
 All in Vitest. Tests that touch the database use a real Postgres (the compose `db`, separate test
 database); no mocks for anything concurrency-related. The fixed test clock is
 `2026-10-20T12:00:00Z`, so the 14-day window covers both autumn changes. The time tests run under
-`TZ=UTC` and again under `TZ=Pacific/Chatham`.
+`TZ=UTC`, again under `TZ=Pacific/Chatham`, and again under `TZ=America/Los_Angeles`.
 
 **`time.test.ts`**
 - **Offsets** across January and July: New York (−5/−4), Phoenix (−7 both), London (0/+1), Dublin

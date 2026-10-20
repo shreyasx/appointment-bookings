@@ -20,7 +20,7 @@
 
 - **Runtimes:**
   - Node ≥ 22.18 locally, where TypeScript type stripping is on by default.
-  - Docker images: `node:24-alpine` and `postgres:17-alpine`, plus `axllent/mailpit` pinned to its current v1 release tag.
+  - Docker images: `node:24-alpine` and `postgres:17-alpine`, plus `axllent/mailpit:v1.31.6`.
 - **Dependencies:**
   - Runtime: `express@5`, `pg`, `zod@4`, `nodemailer`.
   - Dev: `typescript`, `vitest`, `supertest`, `vite`, `@vitejs/plugin-react`, `react`, `react-dom`, `@tanstack/react-query`, `tailwindcss@4`, `@tailwindcss/vite`, and their `@types/*`.
@@ -60,7 +60,7 @@
 
 ## Review Focus
 
-1. **Double-clicking "Confirm"** must create one booking, not two with different mentors. The button is disabled while the booking request is pending (Task 11 check).
+1. **Double-clicking "Confirm"** must create one booking, not two with different mentors. The button is disabled while the booking request is pending and after it succeeds, until the page unloads (Task 11 check).
 2. **Changing the time zone after picking a time** must keep that time selected and show the day it falls on in the new zone (Task 9 test on `shownDayKey`).
 3. **Names that are only spaces, or contain line breaks or other control characters**, would otherwise reach email subjects. They get a 400 with field errors (Task 7 test).
 4. **A zone that ICU spells differently from the list** (`Asia/Kolkata` vs `Asia/Calcutta`). The select must show exactly one Kolkata option, and its value must equal the current zone, or the select goes blank (Task 9 test on `zoneOptions`).
@@ -116,7 +116,7 @@ The repository has no commits yet.
 
 - [ ] **Step 1: Create the project files.** `npm init -y`, then:
   - `package.json`: `"type": "module"`, `"private": true`, `"engines": { "node": ">=22.18" }`, and the scripts
-    `"test": "TZ=UTC vitest run && TZ=Pacific/Chatham vitest run"` and `"typecheck": "tsc"`.
+    `"test": "TZ=UTC vitest run && TZ=Pacific/Chatham vitest run && TZ=America/Los_Angeles vitest run"` and `"typecheck": "tsc"`.
   - Install dev dependencies `typescript vitest @types/node`.
   - `tsconfig.json`:
 
@@ -214,10 +214,10 @@ const valid = [early, late]
 return new Date(valid.length ? Math.min(...valid) : wall - early * 60_000);
 ```
 
-- [ ] **Step 5: Run the tests and see them pass in both host zones**
+- [ ] **Step 5: Run the tests and see them pass in all three host zones**
 
 Run: `npm test`
-Expected: PASS twice, once under `TZ=UTC` and once under `TZ=Pacific/Chatham`.
+Expected: PASS three times, under `TZ=UTC`, `TZ=Pacific/Chatham` and `TZ=America/Los_Angeles`. Chatham is ahead of UTC and Los Angeles behind it, so a local-time getter on a UTC-midnight value fails one of them.
 
 - [ ] **Step 6: Typecheck**
 
@@ -239,7 +239,7 @@ git commit -m "feat(time): add intl-only zone conversions with dst gap and overl
 - Modify: `src/shared/time.ts`, `src/shared/time.test.ts`
 
 **Interfaces:**
-- Consumes: `offsetMinutes` (Task 1).
+- Consumes: `offsetMinutes`, `localDate` (Task 1).
 - Produces (`src/shared/time.ts`):
   - `formatOffset(minutes: number): string`: `'GMT'`, `'GMT+1'`, `'GMT+5:30'`, `'GMT-4'`
   - `zoneAbbreviation(at: Date, tz: string): string`
@@ -253,6 +253,7 @@ git commit -m "feat(time): add intl-only zone conversions with dst gap and overl
   - `formatWhen(at, tz)`: `'Tue 27 Oct, 4:00 PM BST (London)'`
   - `formatSpan(start: Date, end: Date, tz: string): string`: `'4:00–5:00 PM GMT (London)'`
   - `formatZoneOption(at, tz)`: `'London (GMT+1)'`
+  - `formatOtherTime(at, tz, viewerTz)`: the other side's time for a reader in `viewerTz`: `'9:30 PM IST'`, or `'Tue 27 Oct, 2:30 AM IST'` when `at` falls on a different date in `tz` than in `viewerTz`
   - All `at` and `tz` parameters are `Date` and `string`; all return `string`.
 
 - [ ] **Step 1: Write the failing tests** (append to `src/shared/time.test.ts`)
@@ -293,12 +294,19 @@ test('dates, cities, offsets and picker labels', () => {
   expect(canonicalTimeZone('Asia/Kolkata')).toBe(canonicalTimeZone('Asia/Calcutta'));
   expect(formatTime(new Date('2026-10-27T16:00:00Z'), 'Europe/London')).not.toMatch(/\u202f/);
 });
+
+test("the other side's time carries its date when the two sides are on different days", () => {
+  const usEvening = new Date('2026-10-26T21:00:00Z'); // Mon 5:00 PM in New York = Tue 2:30 AM in Kolkata
+  expect(formatOtherTime(new Date('2026-10-27T16:00:00Z'), 'Asia/Kolkata', 'Europe/London')).toBe('9:30 PM IST');
+  expect(formatOtherTime(usEvening, 'Asia/Kolkata', 'America/New_York')).toBe('Tue 27 Oct, 2:30 AM IST');
+  expect(formatOtherTime(usEvening, 'America/New_York', 'Asia/Kolkata')).toBe('Mon 26 Oct, 5:00 PM EDT');
+});
 ```
 
 - [ ] **Step 2: Run the tests and see the new ones fail**
 
 Run: `npx vitest run src/shared/time.test.ts`
-Expected: FAIL, the new imports are not exported.
+Expected: FAIL. The new tests throw `TypeError: formatWhen is not a function` (and the like); the Task 1 tests still pass.
 
 - [ ] **Step 3: Implement the formatters in `src/shared/time.ts`**
   - **`formatTime`**: `en-US` with `{ hour: 'numeric', minute: '2-digit' }`, then replace U+202F with a plain space.
@@ -316,11 +324,12 @@ Expected: FAIL, the new imports are not exported.
     - Otherwise: `'11:00 AM–12:00 PM GMT (London)'`.
     - The separator is an en dash (U+2013).
   - **`formatZoneOption`**: `${cityName} (${formatOffset(offsetMinutes)})`.
+  - **`formatOtherTime`**: `${formatTime} ${zoneAbbreviation}`, prefixed by `${formatDate}, ` when `localDate(at, tz) !== localDate(at, viewerTz)`.
 
-- [ ] **Step 4: Run the tests and see them pass in both host zones**
+- [ ] **Step 4: Run the tests and see them pass in all three host zones**
 
 Run: `npm test`
-Expected: PASS twice.
+Expected: PASS three times.
 
 - [ ] **Step 5: Commit**
 
@@ -341,7 +350,7 @@ git commit -m "feat(time): format times with locally used zone names and city"
 - Consumes: nothing.
 - Produces:
   - `src/server/db.ts`:
-    - `createPool(connectionString: string, max?: number): pg.Pool`. Attaches `pool.on('error', …)` logging, and its module sets the `date` parser.
+    - `createPool(connectionString: string, max?: number): pg.Pool`. Attaches `pool.on('error', …)` logging that skips `err.code === '57P01'` (a test teardown's `drop database … with (force)` ends idle connections), and its module sets the `date` parser.
     - `migrate(pool: pg.Pool): Promise<string[]>`, which returns the file names it applied.
   - `src/server/test-db.ts`:
     - `type TestDb = { pool: pg.Pool; drop(): Promise<void> }`
@@ -350,12 +359,12 @@ git commit -m "feat(time): format times with locally used zone names and city"
 
 - [ ] **Step 1: Write `docker-compose.yml`** with two services for now:
   - `db`:
-    - `postgres:17-alpine`, with `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB` all `bookings`, plus `TZ: UTC` and `PGTZ: UTC`;
+    - `postgres:17-alpine`, with `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB` all `bookings`, plus `TZ: UTC`;
     - ports `"5433:5432"`;
     - `command: ["postgres", "-c", "max_connections=200"]`, because test files run in parallel and each race test opens up to 40 connections;
     - healthcheck `pg_isready -U bookings -d bookings` (interval 2s, retries 30);
     - named volume `db-data` mounted at `/var/lib/postgresql/data`.
-  - `mailpit`: `axllent/mailpit:<current v1 tag>`, `TZ: UTC`, ports `"8025:8025"` and `"1025:1025"`.
+  - `mailpit`: `axllent/mailpit:v1.31.6` (its image has a `readyz` healthcheck, so `--wait` waits on it), `TZ: UTC`, ports `"8025:8025"` and `"1025:1025"`.
 
   Start them: `docker compose up -d db mailpit`.
 
@@ -423,10 +432,10 @@ Expected: FAIL, failing to resolve `./db.ts`.
     - the hours rows.
     It returns the id.
 
-- [ ] **Step 6: Run the tests and see them pass in both host zones**
+- [ ] **Step 6: Run the tests and see them pass in all three host zones**
 
 Run: `npm test`
-Expected: PASS twice. Under `TZ=Pacific/Chatham`, the date test proves the parser works.
+Expected: PASS three times. Under `TZ=Pacific/Chatham`, the date test proves the parser works.
 
 - [ ] **Step 7: Commit**
 
@@ -511,11 +520,20 @@ test("a Los Angeles parent's Monday evening counts toward the mentor's Tuesday",
   expect(slotAt(slots, '2026-10-26T15:00:00.000Z')?.available).toBe(true);  // Monday is untouched
 });
 
+test("the cap uses the mentor's own day, not the UTC day", () => {
+  // Tue 02:30-07:30 in Kolkata runs from Mon 26 Oct 21:00Z to Tue 27 Oct 02:00Z
+  const m = mentor(1, 'Asia/Kolkata', hours([2], '02:30', '07:30'));
+  const slots = buildSlots([m], [booking(1, '2026-10-26T21:00:00Z', '2026-10-27'), booking(1, '2026-10-26T22:00:00Z', '2026-10-27')], NOW);
+  for (const iso of ['2026-10-26T23:00:00.000Z', '2026-10-27T00:00:00.000Z', '2026-10-27T01:00:00.000Z'])
+    expect(slotAt(slots, iso)?.available).toBe(false); // the mentor's Tuesday is full on either UTC date
+  expect(slotAt(slots, '2026-11-02T21:00:00.000Z')?.available).toBe(true); // next Tuesday is open
+});
+
 test('a mentor in New York on the spring-forward day', () => {
   const ny = (start: string, end: string) => mentor(1, 'America/New_York', hours([0], start, end));
   const day = [new Date('2026-03-08T00:00:00Z'), new Date('2026-03-09T00:00:00Z')] as const;
   expect(isoList(classStarts(ny('02:00', '05:00'), ...day))).toEqual(['2026-03-08T07:00:00.000Z', '2026-03-08T08:00:00.000Z']);
-  expect(isoList(classStarts(ny('02:30', '05:30'), ...day))).toEqual(['2026-03-08T08:00:00.000Z']); // starts 3:30 EDT
+  expect(isoList(classStarts(ny('02:30', '05:30'), ...day))).toEqual(['2026-03-08T08:00:00.000Z']); // window starts 3:30 EDT; first class 4:00 EDT
 });
 
 test('a mentor in New York on the fall-back day', () => {
@@ -553,10 +571,10 @@ Expected: FAIL, failing to resolve `./slots.ts`.
     - A (mentor, start) pair is open when there's no booking for that mentor at that instant, and the mentor's count for `localDate(start, mentor.timeZone)` is under `DAILY_CAP`.
     - Merge by instant: `available` is true if any pair is open.
 
-- [ ] **Step 4: Run the tests and see them pass in both host zones**
+- [ ] **Step 4: Run the tests and see them pass in all three host zones**
 
 Run: `npm test`
-Expected: PASS twice.
+Expected: PASS three times.
 
 - [ ] **Step 5: Commit**
 
@@ -613,12 +631,12 @@ test('assigns the least-booked mentor, then the lowest id', async () => {
 });
 
 test("stores the instant and the date in the mentor's own time zone", async () => {
-  await insertMentor(pool, { timeZone: 'Asia/Kolkata', hours: [{ weekday: 2, start: '06:30', end: '07:30' }] });
-  const result = await bookSlot(pool, input('2026-10-27T01:00:00Z'), NOW); // Mon 6:00 PM in Los Angeles
+  await insertMentor(pool, { timeZone: 'Asia/Kolkata', hours: [{ weekday: 2, start: '02:30', end: '03:30' }] });
+  const result = await bookSlot(pool, input('2026-10-26T21:00:00Z'), NOW); // Mon 9:00 PM in London = Tue 2:30 AM in Kolkata
   expect(result).toMatchObject({ ok: true, booking: { mentorLocalDate: '2026-10-27' } });
   expect(result.ok && result.booking.classLink).toMatch(/^https:\/\/classroom\.example\/trial\/[\w-]{8,}$/);
   const { rows } = await pool.query('select starts_at, mentor_local_date from bookings');
-  expect([rows[0].starts_at.toISOString(), rows[0].mentor_local_date]).toEqual(['2026-10-27T01:00:00.000Z', '2026-10-27']);
+  expect([rows[0].starts_at.toISOString(), rows[0].mentor_local_date]).toEqual(['2026-10-26T21:00:00.000Z', '2026-10-27']);
 });
 
 test('cancelled bookings free both the hour and the cap', async () => {
@@ -628,6 +646,7 @@ test('cancelled bookings free both the hour and the cap', async () => {
   expect(await bookSlot(pool, input('2026-10-27T17:00:00Z'), NOW)).toEqual({ ok: false, code: 'SLOT_UNAVAILABLE' });
   await pool.query('update bookings set cancelled_at = now() where id = $1', [first.ok && first.booking.id]);
   expect((await bookSlot(pool, input('2026-10-27T15:00:00Z'), NOW)).ok).toBe(true);
+  expect(await loadActiveBookings(pool, NOW, new Date('2026-11-04T00:00:00Z'))).toHaveLength(2);
 });
 
 test('refuses times that cannot be booked', async () => {
@@ -701,14 +720,14 @@ Expected: FAIL, failing to resolve `./bookings.ts`.
     - Rows map to camelCase.
     - `newClassLink` is `https://classroom.example/trial/${randomUUID()}`.
 
-- [ ] **Step 4: Run the tests and see them pass in both host zones**
+- [ ] **Step 4: Run the tests and see them pass in all three host zones**
 
 Run: `npm test`
-Expected: PASS twice.
+Expected: PASS three times.
 
 - [ ] **Step 5: Prove the cap race test can fail.**
   1. Temporarily delete the `FOR UPDATE` statement and run `npx vitest run src/server/bookings.test.ts -t "cap race"`.
-     Expected: FAIL, `expected [ …2 items ] to have a length of 1`.
+     Expected: FAIL, `AssertionError: expected [ …(2) ] to have a length of 1 but got 2`.
   2. Save that failing output in `docs/red-run.txt`. The README quotes it in Task 14.
   3. Restore the line and re-run.
      Expected: PASS.
@@ -729,7 +748,7 @@ git commit -m "feat(bookings): book with a per-mentor row lock and prove the rac
 - Modify: `package.json` (dependency `nodemailer`; dev dependency `@types/nodemailer`)
 
 **Interfaces:**
-- Consumes: `formatWhen`, `formatDate`, `formatSpan`, `formatTime`, `zoneAbbreviation`, `cityName` (Task 2).
+- Consumes: `formatWhen`, `formatDate`, `formatSpan`, `formatOtherTime`, `cityName` (Task 2).
 - Produces (`src/server/email.ts`):
 
 ```ts
@@ -773,6 +792,13 @@ test('abbreviations follow each side across the clock changes', () => {
     .toBe("Rohan's free trial class: Fri 23 Oct, 4:00 PM BST (London)");
   expect(renderEmails({ ...b, parentTimeZone: 'America/New_York', startsAt: new Date('2026-11-03T15:00:00Z') }, '').parent.subject)
     .toBe("Rohan's free trial class: Tue 3 Nov, 10:00 AM EST (New York)");
+  expect(renderEmails({ ...b, startsAt: new Date('2026-10-23T15:00:00Z') }, '').mentor.text).toContain('For the family: 4:00 PM BST in London');
+});
+
+test("each side sees the other side's date when the days differ", () => {
+  const { parent, mentor } = renderEmails({ ...b, parentTimeZone: 'America/New_York', startsAt: new Date('2026-10-26T21:00:00Z') }, '');
+  expect(parent.text).toContain("Mentor: Priya Sharma, joining from Kolkata, where it's Tue 27 Oct, 2:30 AM IST");
+  expect(mentor.text).toContain('For the family: Mon 26 Oct, 5:00 PM EDT in New York');
 });
 ```
 
@@ -789,7 +815,7 @@ Expected: FAIL, failing to resolve `./email.ts`.
       - "{child}'s free trial class is booked."
       - blank line
       - "When: {formatDate}, {formatSpan}"
-      - "Mentor: {mentor.name}, joining from {mentor city}, where it's {formatTime} {abbr}"
+      - "Mentor: {mentor.name}, joining from {mentor city}, where it's {formatOtherTime(start, mentor zone, parent zone)}"
       - "Class link: {link}"
       - blank line
       - "See your booking: {appUrl}/bookings/{id}"
@@ -799,16 +825,16 @@ Expected: FAIL, failing to resolve `./email.ts`.
       - "You have a new trial class."
       - blank line
       - "When: {formatDate}, {formatSpan}" (in the mentor's zone)
-      - "For the family: {formatTime} {abbr} in {parent city}"
+      - "For the family: {formatOtherTime(start, parent zone, mentor zone)} in {parent city}"
       - "Child: {child}"
       - "Parent: {parentName}"
       - "Class link: {link}"
   - `createSmtpMailer` uses `nodemailer.createTransport(smtpUrl)` and `sendMail({ from, to, subject, text })`.
 
-- [ ] **Step 4: Run the tests and see them pass in both host zones**
+- [ ] **Step 4: Run the tests and see them pass in all three host zones**
 
 Run: `npm test`
-Expected: PASS twice.
+Expected: PASS three times.
 
 - [ ] **Step 5: Commit**
 
@@ -829,7 +855,7 @@ git commit -m "feat(email): render parent and mentor emails in each side's own z
 - Consumes:
   - `loadMentors`, `loadActiveBookings`, `bookSlot`, `getBookingWithMentor` (Task 5);
   - `buildSlots` (Task 4);
-  - `renderEmails`, `Mailer` (Task 6);
+  - `renderEmails`, `Mailer`, and `createSmtpMailer` for the dead-port test (Task 6);
   - `isValidTimeZone` (Task 1).
 - Produces:
   - `src/shared/types.ts`:
@@ -857,7 +883,7 @@ export function createApp(deps: { pool: Pool; clock: Clock; mailer: Mailer; appU
 ```
 
 - [ ] **Step 1: Write the failing tests** in `src/server/api.test.ts`
-  - One database for the file. Two mentors with `ukHours`.
+  - One database for the file. Two mentors in `Asia/Kolkata` with `ukHours` (weekdays 1–5, `'20:30'`–`'23:30'`).
   - A fake mailer pushes into `sent: EmailMessage[]`.
   - `NOW = new Date('2026-10-20T12:00:00Z')`, `clock = { now: () => NOW, demo: false }`.
   - `valid` is a London booking request for `'2026-10-27T16:00:00Z'`.
@@ -911,7 +937,7 @@ test('fetches a booking by id, and 404s otherwise', async () => {
 test('lists slots from the app clock, full hours included', async () => {
   const res = await request(app).get('/api/slots');
   expect([res.body.now, res.body.demo]).toEqual(['2026-10-20T12:00:00.000Z', false]);
-  expect(res.body.slots[0].startsAt >= '2026-10-20T14:00:00.000Z').toBe(true);
+  expect(res.body.slots[0].startsAt).toBe('2026-10-20T15:00:00.000Z');
   expect(res.body.slots).toContainEqual({ startsAt: '2026-10-28T15:00:00.000Z', available: false });
 });
 
@@ -931,16 +957,22 @@ test('every /api response is no-store, and unknown routes are JSON 404s', async 
 
 test('a failing mailer never fails the booking', async () => {
   const log = vi.fn();
-  const broken = createApp({ pool, clock, appUrl: '', log, mailer: { send: () => Promise.reject(new Error('smtp down')) } });
+  const broken = createApp({ pool, clock, appUrl: '', log, mailer: createSmtpMailer('smtp://127.0.0.1:9') }); // nothing listens on port 9
   const res = await request(broken).post('/api/bookings').send({ ...valid, startsAt: '2026-10-30T15:00:00Z' });
   expect(res.status).toBe(201);
   await vi.waitFor(() => expect(log).toHaveBeenCalled());
 });
 
-test('the demo flag reaches both list endpoints', async () => {
-  const demo = createApp({ pool, clock: { now: () => NOW, demo: true }, mailer, appUrl: '' });
-  expect((await request(demo).get('/api/slots')).body.demo).toBe(true);
-  expect((await request(demo).get('/api/mentors')).body.demo).toBe(true);
+test('the app clock drives slots, booking and the mentors list', async () => {
+  // a clock before any real run, so a route that reads new Date() fails here
+  const demo = createApp({ pool, clock: { now: () => new Date('2026-10-14T13:30:00Z'), demo: true }, mailer, appUrl: '' });
+  const slots = (await request(demo).get('/api/slots')).body;
+  expect([slots.now, slots.demo, slots.slots[0].startsAt])
+    .toEqual(['2026-10-14T13:30:00.000Z', true, '2026-10-14T16:00:00.000Z']); // 15:00Z is under 2 hours away
+  expect((await request(demo).post('/api/bookings').send({ ...valid, startsAt: '2026-10-15T15:00:00Z' })).status).toBe(201);
+  const mentors = (await request(demo).get('/api/mentors')).body;
+  expect(mentors.demo).toBe(true);
+  expect(mentors.mentors.flatMap((m: MentorDto) => m.bookings.map((b) => b.startsAt))).toContain('2026-10-15T15:00:00.000Z');
 });
 
 test('createClock: real by default, demo clock starts at DEMO_NOW and keeps ticking', () => {
@@ -952,6 +984,7 @@ test('createClock: real by default, demo clock starts at DEMO_NOW and keeps tick
   real += 90_000;
   expect(c.now().toISOString()).toBe('2026-10-20T12:01:30.000Z');
   expect(() => createClock('next tuesday')).toThrow(/DEMO_NOW/);
+  expect(() => createClock('2026-10-20T12:00:00')).toThrow(/DEMO_NOW/); // no offset would read in the host zone
 });
 ```
 
@@ -961,7 +994,7 @@ Run: `npx vitest run src/server/api.test.ts`
 Expected: FAIL, failing to resolve `./app.ts`.
 
 - [ ] **Step 3: Implement `src/shared/types.ts` and `src/server/app.ts`**
-  - **`createClock`**: an empty or missing value means the real clock. Otherwise compute `offset = Date.parse(demoNow) - realNow()` once and return `{ now: () => new Date(realNow() + offset), demo: true }`. If the value doesn't parse, throw `Error('DEMO_NOW must be an ISO instant')`.
+  - **`createClock`**: an empty or missing value means the real clock. Otherwise compute `offset = Date.parse(demoNow) - realNow()` once and return `{ now: () => new Date(realNow() + offset), demo: true }`. If `z.iso.datetime({ offset: true }).safeParse(demoNow)` fails, throw `Error('DEMO_NOW must be an ISO instant')`; `Date.parse` alone accepts `'Oct 20 2026'` and reads offset-less times in the host zone.
   - **Body schema (Zod 4)**:
     - `startsAt`: `z.iso.datetime({ offset: true })`, converted to a `Date`, then refined to be exactly on the UTC hour.
     - `parentName` and `childName`: `z.string().trim().min(1).max(80).regex(/^[^\p{Cc}]*$/u)`.
@@ -985,10 +1018,10 @@ Expected: FAIL, failing to resolve `./app.ts`.
        - Anything else: log it and return 500 `INTERNAL`.
   - `app.disable('x-powered-by')`.
 
-- [ ] **Step 4: Run the tests and see them pass in both host zones**
+- [ ] **Step 4: Run the tests and see them pass in all three host zones**
 
 Run: `npm test`
-Expected: PASS twice.
+Expected: PASS three times.
 
 - [ ] **Step 5: Commit**
 
@@ -1080,10 +1113,10 @@ Expected: FAIL, failing to resolve `./seed.ts`.
     1. Book every open slot in `[now + 2 days, now + 2 days + 50 hours)`, calling `bookSlot` repeatedly on each slot until it returns `SLOT_UNAVAILABLE`.
     2. Then, using fresh `buildSlots` results, take the first open slot at or after `now + 5 days` whose UTC hour is 16, and book it until it's unavailable.
 
-- [ ] **Step 4: Run the tests and see them pass in both host zones**
+- [ ] **Step 4: Run the tests and see them pass in all three host zones**
 
 Run: `npm test`
-Expected: PASS twice.
+Expected: PASS three times.
 
 - [ ] **Step 5: Implement `src/server/main.ts`**
   - **Environment** (§14):
@@ -1104,7 +1137,7 @@ Expected: PASS twice.
 
 Run: `npm run dev:server`, then in another shell `curl -s localhost:3000/api/slots | head -c 200`
 Expected: JSON starting `{"now":"…","demo":false,"slots":[{"startsAt":`. Then:
-1. POST a booking with curl, using `valid` from Task 7 with an open `startsAt`. Expected: 201.
+1. POST a booking: `curl -s -X POST localhost:3000/api/bookings -H 'content-type: application/json' -d '{"startsAt":"<an available startsAt from /api/slots>","parentName":"Asha Patel","parentEmail":"asha@example.com","childName":"Rohan","parentTimeZone":"Europe/London"}'`. Expected: 201.
 2. Run `curl -s localhost:8025/api/v1/messages | grep -o '"Subject":"[^"]*"'`. Expected: two subjects, one per side.
 
 - [ ] **Step 7: Commit**
@@ -1260,10 +1293,10 @@ Expected: FAIL, failing to resolve `./booking.ts`.
     - `slotSelected`: set `selected`, and `unavailable: null`.
     - `slotUnavailable`: set `selected: null` and `unavailable`.
 
-- [ ] **Step 4: Run the tests and see them pass in both host zones**
+- [ ] **Step 4: Run the tests and see them pass in all three host zones**
 
 Run: `npm test`
-Expected: PASS twice.
+Expected: PASS three times.
 
 - [ ] **Step 5: Commit**
 
@@ -1281,6 +1314,7 @@ git commit -m "feat(web): add pure day grouping, alternatives, zone options and 
 - Modify:
   - `vite.config.ts`: add `react()` and `tailwindcss()` plugins, `build.outDir: 'dist/web'`, and `server.proxy: { '/api': 'http://localhost:3000' }`.
   - `package.json`: dev dependencies `vite @vitejs/plugin-react react react-dom @tanstack/react-query tailwindcss @tailwindcss/vite @types/react @types/react-dom`; scripts `"dev": "vite"` and `"build": "vite build"`.
+  - `tsconfig.json`: `"types": ["node", "vite/client"]`. TypeScript 7 checks side-effect imports, so `import './index.css'` needs Vite's client types.
 
 **Interfaces:**
 - Consumes:
@@ -1297,7 +1331,7 @@ git commit -m "feat(web): add pure day grouping, alternatives, zone options and 
   - `hooks.ts`:
     - `useTimeZone(): { timeZone: string; setTimeZone(tz: string): void; deviceTimeZone: string }`;
     - `useSlots()`: `useQuery` keyed `['slots']`, `refetchInterval: 60_000`;
-    - `useBookSlot(onUnavailable: (startsAt: string) => void)`: `useMutation`. On success it calls `location.assign('/bookings/' + id)`. On a 409 it invalidates `['slots']` and calls `onUnavailable(variables.startsAt)`.
+    - `useBookSlot(onUnavailable: (startsAt: string) => void)`: `useMutation`. On success it calls `location.assign('/bookings/' + id)`. On a 409 it calls `queryClient.invalidateQueries({ queryKey: ['slots'] })` and `onUnavailable(variables.startsAt)`.
   - `ui.tsx`, using the sizes from spec §10:
     - `Card({ children })`: `rounded-card border border-line bg-white shadow-card`, 32px padding, up to 440px wide, full width on phones;
     - `CardTitle()`: "Book a FREE class for your child", 24px medium, with "FREE" underlined in `decoration-brand`;
@@ -1326,12 +1360,12 @@ git commit -m "feat(web): add pure day grouping, alternatives, zone options and 
   - **App**:
     - Header: a "Codeyoung" wordmark (`<a href="/">`) and an `<a href="/mentors">` link labelled "Our mentors".
     - Routes: `/^\/bookings\/([0-9a-f-]{36})$/` renders `ConfirmationPage`, and anything else renders a not-found card with a link home.
-  - **ConfirmationPage** (spec §10), using `useQuery(['booking', id])`:
+  - **ConfirmationPage** (spec §10), using `useQuery({ queryKey: ['booking', id], queryFn: () => getBooking(id) })`:
     - `Progress step={3}`.
     - "You're booked!"
     - "{childName}'s free trial class"
     - `formatDateWithYear`, then `formatSpan(start, end, parentTimeZone)`.
-    - "Your mentor joins from {city}, where it's {time} {abbr}.", in the mentor's own zone.
+    - "Your mentor joins from {city}, where it's {formatOtherTime(start, mentor zone, parentTimeZone)}."
     - A mentor card with initials, name, subjects and bio.
     - A "Join class" button linking `classLink`, with the link text shown beneath it.
     - "We've emailed this to {parentEmail}."
@@ -1345,18 +1379,18 @@ Expected: exit 0, and `dist/web/index.html` exists.
 
 - [ ] **Step 4: Check it in the browser**
   1. Start `npm run dev:server` and `npm run dev`.
-  2. Create a booking with curl (as in Task 8).
+  2. Create a booking: `curl -s -X POST localhost:3000/api/bookings -H 'content-type: application/json' -d '{"startsAt":"<an available startsAt from /api/slots>","parentName":"Asha Patel","parentEmail":"asha@example.com","childName":"Rohan","parentTimeZone":"Europe/London"}'`.
   3. Open `http://localhost:5173/bookings/<id>`.
 
 Expected:
-- The confirmation matches spec §10 and mockup 6.
+- The confirmation matches spec §10.
 - A made-up UUID shows the not-found copy.
 - `/nope` shows the not-found card.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add index.html vite.config.ts package.json package-lock.json src/web/index.css src/web/main.tsx src/web/App.tsx src/web/api.ts src/web/hooks.ts src/web/ui.tsx src/web/ConfirmationPage.tsx
+git add index.html vite.config.ts tsconfig.json package.json package-lock.json src/web/index.css src/web/main.tsx src/web/App.tsx src/web/api.ts src/web/hooks.ts src/web/ui.tsx src/web/ConfirmationPage.tsx
 git commit -m "feat(web): add shell, palette, api client, hooks and confirmation page"
 ```
 
@@ -1375,7 +1409,7 @@ git commit -m "feat(web): add shell, palette, api client, hooks and confirmation
   - the formatters (Task 2);
   - `Card`, `CardTitle`, `Progress`, `DemoBanner` (Task 10).
 
-- [ ] **Step 1: Implement `BookingPage.tsx`** following spec §10 and the approved mockups 1–5. These decisions aren't in the spec:
+- [ ] **Step 1: Implement `BookingPage.tsx`** following spec §10. These decisions aren't in the spec:
   - **State**: `useReducer(flowReducer, initialFlow)`. Compute these in render, never in an effect:
     - `days = groupIntoDays(slots, timeZone, new Date(data.now))`;
     - `key = shownDayKey(…)`.
@@ -1397,7 +1431,7 @@ git commit -m "feat(web): add shell, palette, api client, hooks and confirmation
     - On a 409, a `role="alert"` box: "Sorry, {time} on {date} is no longer available." and "The nearest open times are below. Pick one and confirm again. Your details are kept." It has buttons from `nearestOpenTimes`, and a label includes the date when it isn't the shown day.
   - **Confirm button**:
     - Label: "Confirm {formatDate}, {formatTime} {abbr}", or "Choose a time" when nothing is selected.
-    - **Disabled while `book.isPending`**, and the label reads "Booking…".
+    - **Disabled while `book.isPending || book.isSuccess`**, and the label reads "Booking…". `isSuccess` covers the gap between the response and the page unloading after `location.assign`.
   - **Focus**: when the step changes, move focus to the step heading (`tabIndex={-1}`).
   - **Demo banner**: show it above the card when `data.demo`.
   - **Loading and errors**: "Loading times…" while loading. On a load error: "We couldn't load times." with a "Try again" button that calls `refetch`.
@@ -1465,11 +1499,11 @@ test("mentorDays groups by the mentor's own day and marks the cap", () => {
 - [ ] **Step 2: Run it and see it fail**
 
 Run: `npx vitest run src/web/booking.test.ts -t mentorDays`
-Expected: FAIL, `mentorDays` is not exported.
+Expected: FAIL, `TypeError: mentorDays is not a function`.
 
 - [ ] **Step 3: Implement `mentorDays` and `MentorsPage.tsx`**
   - **`mentorDays`**: `atCap` means `times.length >= 2`.
-  - **The page** uses `useQuery(['mentors'], getMentors)`, plus `DemoBanner` when `demo`. Its heading is "Our mentors", and the cards sit in a 1-column grid on phones and 2 columns from `md` up. Each card shows:
+  - **The page** uses `useQuery({ queryKey: ['mentors'], queryFn: getMentors })`, plus `DemoBanner` when `demo`. Its heading is "Our mentors", and the cards sit in a 1-column grid on phones and 2 columns from `md` up. Each card shows:
     - initials;
     - the name;
     - "Teaches from {cityName} · {zoneAbbreviation(now)}";
@@ -1486,8 +1520,8 @@ Expected: PASS, exit 0.
 
 - [ ] **Step 5: Check it in the browser**
 
-Open `/mentors` with the same setup as Task 11.
-Expected: 10 cards, with seeded classes listed in IST and at least one "2 of 2 that day" badge, matching mockup 7B.
+Setup: `docker compose down -v && docker compose up -d db mailpit`, then `DEMO_NOW=2026-10-20T12:00:00Z npm run dev:server` and `npm run dev`. Open `http://localhost:5173/mentors`.
+Expected: 10 cards, with seeded classes listed in IST and at least one "2 of 2 that day" badge, as spec §10 describes.
 
 - [ ] **Step 6: Commit**
 
@@ -1506,7 +1540,7 @@ git commit -m "feat(web): add the mentors showcase with booked times in each men
 
 **Interfaces:**
 - Consumes: `npm run build`, `npm test`, `src/server/main.ts`.
-- Produces: `docker compose up` (the app on 3000, Mailpit on 8025) and `docker compose run --rm test`.
+- Produces: `docker compose up` (the app on 3000, Mailpit on 8025) and `docker compose run --rm --build test`.
 
 - [ ] **Step 1: Write the files**
   - **`.dockerignore`**: `node_modules`, `dist`, `.git`, `.playwright-mcp`, `.superpowers`, `docs`, `*.pdf`.
@@ -1564,8 +1598,8 @@ Expected: JSON starting `{"now":`, then `1`. Then:
 
 - [ ] **Step 4: Run the suite in Docker**
 
-Run: `docker compose run --rm test`
-Expected: all tests pass, twice (UTC and Chatham).
+Run: `docker compose run --rm --build test`
+Expected: all tests pass, three times (UTC, Chatham and Los Angeles).
 
 - [ ] **Step 5: Check the demo clock end to end**
 
@@ -1599,12 +1633,13 @@ git commit -m "feat(docker): one compose up migrates, seeds and serves; add test
     - it starts again from `DEMO_NOW` whenever the app restarts.
   - **The edge-case table and examples** from spec §7.
   - **The API reference**, with one curl example per endpoint and the error shape.
+  - **Tests:** `docker compose run --rm --build test` (or `npm test` with `db` and `mailpit` up). The suite runs under `TZ=UTC`, `TZ=Pacific/Chatham` and `TZ=America/Los_Angeles`: Chatham is ahead of UTC and Los Angeles is behind it, like every US parent's browser.
   - **"How we know the race test bites"**: the failing output from `docs/red-run.txt`.
   - **Assumptions and trade-offs**: the spec's non-goals, the `ponytail:` notes, and Intl-only (with Temporal as the upgrade path).
 
 - [ ] **Step 2: Final verification**
 
-Run: `npm run typecheck && docker compose down -v && docker compose up --build -d --wait && docker compose run --rm test`
+Run: `npm run typecheck && docker compose down -v && docker compose up --build -d --wait && docker compose run --rm --build test`
 Expected: exit 0, and both test runs pass. Then click through `/`, a confirmation page and `/mentors` at `localhost:3000`, once without and once with `DEMO_NOW`.
 
 - [ ] **Step 3: Commit**
