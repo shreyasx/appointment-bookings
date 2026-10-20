@@ -7,6 +7,7 @@ function formatter(locale: string, timeZone: string, options: Intl.DateTimeForma
   const key = `${locale}|${timeZone}|${JSON.stringify(options)}`;
   let f = formatters.get(key);
   if (!f) {
+    if (formatters.size > 500) formatters.clear(); // ponytail: clear-all past 500 entries; an LRU if real zones ever churn
     f = new Intl.DateTimeFormat(locale, { ...options, timeZone });
     formatters.set(key, f);
   }
