@@ -42,6 +42,11 @@ test('nearestOpenTimes ranks by distance, returns time order, skips the target a
   expect(nearestOpenTimes(slots, '2026-10-27T16:00:00Z')).toEqual(['2026-10-27T14:00:00Z', '2026-10-27T15:00:00Z', '2026-10-27T21:00:00Z']);
 });
 
+test('nearestOpenTimes breaks a tie toward the earlier slot', () => {
+  const slots = [slot('2026-10-27T15:00:00Z'), slot('2026-10-27T17:00:00Z')];
+  expect(nearestOpenTimes(slots, '2026-10-27T16:00:00Z', 1)).toEqual(['2026-10-27T15:00:00Z']);
+});
+
 test('nearestOpenDays looks both ways, or finds none', () => {
   const days = groupIntoDays([slot('2026-10-21T15:00:00Z'), slot('2026-10-24T10:00:00Z')], 'Europe/London', NOW);
   expect(nearestOpenDays(days, '2026-10-22')).toEqual({ before: days[1], after: days[4] });
@@ -70,6 +75,13 @@ test('zoneOptions: common zones first, exactly one entry per zone, and the curre
 });
 
 // the select goes blank unless one option's value is the current zone, whichever way ICU spells it or the list omits it
+test('zoneOptions returns the same array for the same zone and hour, and a fresh one when either changes', () => {
+  const options = zoneOptions('Europe/London', NOW);
+  expect(zoneOptions('Europe/London', new Date(NOW.getTime() + 60_000))).toBe(options);
+  expect(zoneOptions('Europe/London', new Date(NOW.getTime() + 3_600_000))).not.toBe(options);
+  expect(zoneOptions('America/New_York', NOW).find((o) => o.value === 'America/New_York')).toBeDefined();
+});
+
 test.each(['UTC', 'Europe/Paris', 'Europe/Kiev', 'Asia/Calcutta'])('zoneOptions(%s) has one option whose value is the current zone, and no zone twice', (current) => {
   const options = zoneOptions(current, NOW);
   expect(options.filter((o) => o.value === current)).toHaveLength(1);
@@ -81,6 +93,7 @@ test('initialTimeZone and sameZone', () => {
   expect(initialTimeZone('Europe/London', 'America/New_York')).toBe('Europe/London');
   expect(initialTimeZone('Mars/Base', 'America/New_York')).toBe('America/New_York');
   expect(initialTimeZone(null, 'America/New_York')).toBe('America/New_York');
+  expect(initialTimeZone(null, 'Mars/Base')).toBe('UTC');
   expect(sameZone('Asia/Kolkata', 'Asia/Calcutta')).toBe(true);
 });
 
@@ -91,6 +104,7 @@ test('flowReducer keeps details through a 409 and clears the selection', () => {
   s = flowReducer(s, { type: 'slotSelected', startsAt: '2026-10-27T16:00:00Z' });
   s = flowReducer(s, { type: 'slotUnavailable', startsAt: '2026-10-27T16:00:00Z' });
   expect(s).toMatchObject({ step: 'time', details, selected: null, unavailable: '2026-10-27T16:00:00Z' });
+  expect(flowReducer(s, { type: 'slotSelected', startsAt: '2026-10-27T17:00:00Z' })).toMatchObject({ selected: '2026-10-27T17:00:00Z', unavailable: null });
   expect(flowReducer(s, { type: 'daySelected', dayKey: '2026-10-28' })).toMatchObject({ chosenDay: '2026-10-28', selected: null });
   expect(flowReducer(s, { type: 'back' })).toMatchObject({ step: 'details', details });
 });

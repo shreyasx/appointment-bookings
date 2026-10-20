@@ -72,11 +72,22 @@ export function sameZone(a: string, b: string): boolean {
   return canonicalTimeZone(a) === canonicalTimeZone(b);
 }
 
+type ZoneOption = { value: string; label: string; group: 'common' | 'all' };
+
+// ponytail: one-entry cache keyed by zone and UTC hour; zoneOptions builds ~840 formatters (~30 ms) and the page re-renders on every state change
+let last: { key: string; options: ZoneOption[] } | undefined;
+
 /** One option per real zone, common zones first. The option for `current` carries `current`'s own spelling, or the select shows nothing. */
-export function zoneOptions(current: string, now: Date): { value: string; label: string; group: 'common' | 'all' }[] {
+export function zoneOptions(current: string, now: Date): ZoneOption[] {
+  const key = `${current}|${Math.floor(now.getTime() / 3_600_000)}`; // the hour keeps offset labels fresh across a clock change
+  if (last?.key !== key) last = { key, options: buildZoneOptions(current, now) };
+  return last.options;
+}
+
+function buildZoneOptions(current: string, now: Date): ZoneOption[] {
   const currentZone = canonicalTimeZone(current);
   const seen = new Set<string>();
-  const options: { value: string; label: string; group: 'common' | 'all' }[] = [];
+  const options: ZoneOption[] = [];
   const add = (tz: string, group: 'common' | 'all') => {
     const zone = canonicalTimeZone(tz);
     if (seen.has(zone)) return; // 'Asia/Kolkata' and 'Asia/Calcutta' are one zone
@@ -91,9 +102,10 @@ export function zoneOptions(current: string, now: Date): { value: string; label:
   return options;
 }
 
-/** The stored zone when it is still a real one, otherwise the device's. */
+/** The stored zone when it is still a real one, else the device's, else UTC, so a junk zone never reaches the Intl calls below. */
 export function initialTimeZone(stored: string | null, device: string): string {
-  return stored && isValidTimeZone(stored) ? stored : device;
+  if (stored && isValidTimeZone(stored)) return stored;
+  return isValidTimeZone(device) ? device : 'UTC';
 }
 
 export type Details = { parentName: string; parentEmail: string; childName: string };
