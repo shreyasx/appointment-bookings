@@ -245,7 +245,7 @@ T2: lock 7 → (waits for T1) → free at 16:00? yes → 2 < 2? no → ROLLBACK 
    instants; it doesn't know or care about the parent's day boundaries. Changing the zone regroups
    instantly, with no refetch.
 5. **One display style for everyone, in the UI and in emails**, exactly as in the approved mockups:
-   "Tue 27 Oct, 4:00 PM BST (London)", "9:30 PM IST (Kolkata)", "11:00 AM EST (New York)".
+   "Fri 23 Oct, 4:00 PM BST (London)", "9:30 PM IST (Kolkata)", "11:00 AM EST (New York)".
    - Dates use weekday, day and short month ("Tue 27 Oct"), plus the year on the confirmation page.
      Never numeric dates.
    - Times are 12-hour with uppercase AM/PM, as in Codeyoung's own picker.
@@ -318,7 +318,7 @@ No dependencies, just `Intl`. Indicative API; the builder picks the names:
     becomes 3:30;
   - **in a repeated hour** (fall back), use the first occurrence.
 - Formatting helpers that take `(instant, tz)` and implement rule 5: the time ("4:00 PM"), the date
-  ("Tue 27 Oct"), the abbreviation, the city, and the combined "Tue 27 Oct, 4:00 PM BST (London)".
+  ("Tue 27 Oct"), the abbreviation, the city, and the combined "Fri 23 Oct, 4:00 PM BST (London)".
   Some runtimes put a narrow no-break space (U+202F) before AM/PM, so tests normalise whitespace
   before comparing strings.
 - `cityName(tz)`: the last IANA segment with `_` turned into spaces, plus a tiny alias map for cities

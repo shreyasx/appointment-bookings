@@ -40,7 +40,7 @@
   - Booking window: 120 minutes ahead at the earliest, 14 days at the latest, both ends inclusive.
   - Cap: 2 active bookings per mentor per calendar day in **the mentor's own time zone**. "Active" means `cancelled_at is null`.
 - **Wording:** say "the mentor's own time zone" in code, comments and README, never "IST".
-- **Display style everywhere** (UI and emails): `Tue 27 Oct, 4:00 PM BST (London)`, built only from `src/shared/time.ts`.
+- **Display style everywhere** (UI and emails): `Fri 23 Oct, 4:00 PM BST (London)`, built only from `src/shared/time.ts`.
 - **API errors:**
   - Shape: `{ "error": { "code", "message", "fields"? } }`.
   - Codes: `VALIDATION_FAILED` 400, `SLOT_UNAVAILABLE` 409, `NOT_FOUND` 404, `INTERNAL` 500.
@@ -56,7 +56,7 @@
   - No co-authored-by or other attribution trailer.
   - Add files explicitly. Never commit `.playwright-mcp/`, the assignment PDF, `node_modules/` or `dist/`.
 - **Public repository:** no secrets except the repo's own Postgres credentials, `bookings`/`bookings`.
-- **Local database:** tests and the dev server default to `postgres://bookings:bookings@localhost:5433/bookings`, the compose `db` service on host port 5433. From Task 3 onwards, `npm test` needs `docker compose up -d db mailpit` running.
+- **Local database:** tests and the dev server default to `postgres://bookings:bookings@localhost:5433/bookings`, the compose `db` service on host port 5433. From Task 3 onwards, `npm test` needs `docker compose up -d db` running.
 
 ## Review Focus
 
@@ -250,7 +250,7 @@ git commit -m "feat(time): add intl-only zone conversions with dst gap and overl
   - `formatDateWithYear(at, tz)`: `'Tue 27 Oct 2026'`
   - `formatDayKey(key: string): string`: `'Sun 25 Oct'`
   - `formatZone(at, tz)`: `'BST (London)'`
-  - `formatWhen(at, tz)`: `'Tue 27 Oct, 4:00 PM BST (London)'`
+  - `formatWhen(at, tz)`: `'Fri 23 Oct, 4:00 PM BST (London)'`
   - `formatSpan(start: Date, end: Date, tz: string): string`: `'4:00–5:00 PM GMT (London)'`
   - `formatZoneOption(at, tz)`: `'London (GMT+1)'`
   - `formatOtherTime(at, tz, viewerTz)`: the other side's time for a reader in `viewerTz`: `'9:30 PM IST'`, or `'Tue 27 Oct, 2:30 AM IST'` when `at` falls on a different date in `tz` than in `viewerTz`
@@ -1633,7 +1633,7 @@ git commit -m "feat(docker): one compose up migrates, seeds and serves; add test
     - it starts again from `DEMO_NOW` whenever the app restarts.
   - **The edge-case table and examples** from spec §7.
   - **The API reference**, with one curl example per endpoint and the error shape.
-  - **Tests:** `docker compose run --rm --build test` (or `npm test` with `db` and `mailpit` up). The suite runs under `TZ=UTC`, `TZ=Pacific/Chatham` and `TZ=America/Los_Angeles`: Chatham is ahead of UTC and Los Angeles is behind it, like every US parent's browser.
+  - **Tests:** `docker compose run --rm --build test` (or `npm test` with `db` up). The suite runs under `TZ=UTC`, `TZ=Pacific/Chatham` and `TZ=America/Los_Angeles`: Chatham is ahead of UTC and Los Angeles is behind it, like every US parent's browser.
   - **"How we know the race test bites"**: the failing output from `docs/red-run.txt`.
   - **Assumptions and trade-offs**: the spec's non-goals, the `ponytail:` notes, and Intl-only (with Temporal as the upgrade path).
 
