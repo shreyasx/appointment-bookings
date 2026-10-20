@@ -34,7 +34,7 @@ export function worksAt(mentor: Mentor, startsAt: Date): boolean {
 /** Class starts on the UTC hour inside [from, to], sorted and unique. */
 export function classStarts(mentor: Mentor, from: Date, to: Date): Date[] {
   const starts = new Set<number>();
-  // a day either side, because the mentor's day can straddle the UTC date
+  // a day either side is purely defensive; walking the mentor's own local dates already covers a UTC-date straddle
   const last = addDays(localDate(to, mentor.timeZone), 1);
   for (let date = addDays(localDate(from, mentor.timeZone), -1); date <= last; date = addDays(date, 1)) {
     for (const [open, close] of windows(mentor, date)) {

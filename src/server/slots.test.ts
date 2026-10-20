@@ -76,7 +76,7 @@ test("US-evening hours put both of London's 1:00 AM slots on 25 Oct", () => {
 });
 
 test("worksAt fits the whole class inside the mentor's hours", () => {
-  expect(worksAt(ukEvening(1), new Date('2026-10-27T17:00:00Z'))).toBe(true);  // 10:30-11:30 PM IST
+  expect(worksAt(ukEvening(1), new Date('2026-10-27T17:00:00Z'))).toBe(true);  // 10:30-11:30 PM in Kolkata
   expect(worksAt(ukEvening(1), new Date('2026-10-27T18:00:00Z'))).toBe(false); // would end after 11:30 PM
   expect(worksAt(ukEvening(1), new Date('2026-10-25T15:00:00Z'))).toBe(false); // Sunday
 });
