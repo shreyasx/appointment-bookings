@@ -442,7 +442,7 @@ on, a small banner above the card says so (section 7).
     Options are labelled "City (GMT±h)".
   - The current zone is always included, even if the list lacks it.
 - **Day chips**: 14 of them, for today and the next 13 local days, each with its open-slot count.
-  - A day with none says "Full".
+  - A day whose times are all taken says "Full". A day with no times at all (today after the 2-hour lead, or a day nobody works) says "No slots".
   - Slots beyond the 14th local day are ignored, so no chip shows a half-counted day.
   - The row scrolls horizontally, with arrow buttons.
 - **Clock-change notice**: when the selected day is on a different UTC offset from today, a notice

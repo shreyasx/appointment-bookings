@@ -1422,12 +1422,12 @@ git commit -m "feat(web): add shell, palette, api client, hooks and confirmation
     - If `!sameZone(timeZone, deviceTimeZone)`, show "Your device is set to {city} time." with a button "Use {city} time".
   - **Days and slots**:
     - Both are native radios in a `<fieldset>` with an `sr-only` legend. Each `<input class="sr-only peer">` is styled through `peer-checked:` / `peer-focus-visible:` / `peer-disabled:`.
-    - Chip footer: "1 slot", "{n} slots", or "Full".
+    - Chip footer: "1 slot", "{n} slots", "Full" when every time that day is taken, or "No slots" when the day has no times at all.
     - Arrow buttons scroll the chip row by its own width.
   - **Notices and alerts**, using the spec §10 copy:
     - The clock-change notice shows when `key >= change.dayKey`: "Clocks in {city} change on {formatDayKey(change.dayKey)}. Times from then on are {to}, not {from}." A mixed day appends "On this day each time shows its zone." and its slot labels include `zoneAbbreviation`.
     - Under the grid when any hour is full: "Greyed-out times are full: every mentor is booked then."
-    - Empty day: "Every mentor is booked on {day}.", then "The nearest days with open times:" with buttons "{day} · {n} times". If there are none on either side: "No times are open in the next 14 days. Please check back soon."
+    - Empty day: "Every mentor is booked on {day}." when its times are all taken, "No times are left today." for today with none left, or "There are no times on {day}." otherwise; then "The nearest days with open times:" with buttons "{day} · {n} times". If there are none on either side: "No times are open in the next 14 days. Please check back soon."
     - On a 409, a `role="alert"` box: "Sorry, {time} on {date} is no longer available." and "The nearest open times are below. Pick one and confirm again. Your details are kept." It has buttons from `nearestOpenTimes`, and a label includes the date when it isn't the shown day.
   - **Confirm button**:
     - Label: "Confirm {formatDate}, {formatTime} {abbr}", or "Choose a time" when nothing is selected.
