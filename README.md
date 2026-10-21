@@ -61,31 +61,31 @@ The suite runs under `TZ=UTC`, `TZ=Pacific/Chatham` and `TZ=America/Los_Angeles`
 
 The tests use real Postgres, with a throwaway database per test file, and a fixed clock (`2026-10-20T12:00:00Z`). An in-memory mailer stands in for SMTP, except in one test that points the mailer at a closed port.
 
-| File | Covers |
-|---|---|
-| `src/shared/time.test.ts` | offsets, the missing and repeated hours, display formats, Dublin, both spellings of India's zone, zone validation |
-| `src/server/slots.test.ts` | the booking window, the cap on the mentor's own day, a New York mentor on both clock-change days |
-| `src/server/bookings.test.ts` | assignment order, the same-hour race, the cap race, a burst of 80 concurrent bookings |
-| `src/server/api.test.ts` | validation and the error shape, 409s, `no-store`, emails sent after the response, a failing mailer, the demo clock |
-| `src/server/email.test.ts` | both emails, each in its reader's own time zone |
-| `src/server/seed.test.ts` | the seed repeats safely and leaves a full day and a full hour for London, New York and Los Angeles |
-| `src/server/db.test.ts` | migrations, `date` columns in any host zone, the one-booking-per-hour index |
-| `src/web/booking.test.ts` | day grouping, nearest alternatives, the clock-change notice, zone options, the booking flow reducer |
+| File                          | Covers                                                                                                             |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `src/shared/time.test.ts`     | offsets, the missing and repeated hours, display formats, Dublin, both spellings of India's zone, zone validation  |
+| `src/server/slots.test.ts`    | the booking window, the cap on the mentor's own day, a New York mentor on both clock-change days                   |
+| `src/server/bookings.test.ts` | assignment order, the same-hour race, the cap race, a burst of 80 concurrent bookings                              |
+| `src/server/api.test.ts`      | validation and the error shape, 409s, `no-store`, emails sent after the response, a failing mailer, the demo clock |
+| `src/server/email.test.ts`    | both emails, each in its reader's own time zone                                                                    |
+| `src/server/seed.test.ts`     | the seed repeats safely and leaves a full day and a full hour for London, New York and Los Angeles                 |
+| `src/server/db.test.ts`       | migrations, `date` columns in any host zone, the one-booking-per-hour index                                        |
+| `src/web/booking.test.ts`     | day grouping, nearest alternatives, the clock-change notice, zone options, the booking flow reducer                |
 
-Type checking: `npm run typecheck`.
+Type checking: `npm run typecheck`. Formatting: `npm run format` (Prettier), and `npm run format:check` to check without writing.
 
 ## Configuration
 
 Environment variables, with the values compose sets and the defaults in `src/server/main.ts` for a run outside compose:
 
-| Variable | In compose | Outside compose | Purpose |
-|---|---|---|---|
-| `DATABASE_URL` | `postgres://bookings:bookings@db:5432/bookings` | `postgres://bookings:bookings@localhost:5433/bookings` | Postgres |
-| `SMTP_URL` | `smtp://mailpit:1025` | `smtp://localhost:1025` | outgoing mail |
-| `APP_URL` | `http://localhost:3000` | `http://localhost:3000` | links in emails |
-| `PORT` | `3000` | `3000` | HTTP port |
-| `TZ` | `UTC` | the host's | set on every container; output never depends on it |
-| `DEMO_NOW` | unset | unset | an ISO instant such as `2026-10-20T12:00:00Z` starts the demo clock |
+| Variable       | In compose                                      | Outside compose                                        | Purpose                                                             |
+| -------------- | ----------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------- |
+| `DATABASE_URL` | `postgres://bookings:bookings@db:5432/bookings` | `postgres://bookings:bookings@localhost:5433/bookings` | Postgres                                                            |
+| `SMTP_URL`     | `smtp://mailpit:1025`                           | `smtp://localhost:1025`                                | outgoing mail                                                       |
+| `APP_URL`      | `http://localhost:3000`                         | `http://localhost:3000`                                | links in emails                                                     |
+| `PORT`         | `3000`                                          | `3000`                                                 | HTTP port                                                           |
+| `TZ`           | `UTC`                                           | the host's                                             | set on every container; output never depends on it                  |
+| `DEMO_NOW`     | unset                                           | unset                                                  | an ISO instant such as `2026-10-20T12:00:00Z` starts the demo clock |
 
 Compose passes `DEMO_NOW` through from the shell (`DEMO_NOW: ${DEMO_NOW:-}`). A value that isn't an ISO instant with an offset stops the server at boot.
 
@@ -98,15 +98,21 @@ To run the server on the host instead of in a container: `docker compose stop ap
 All JSON. Every `/api` response sends `Cache-Control: no-store`. Errors always have this shape, with `fields` only on validation errors:
 
 ```json
-{ "error": { "code": "VALIDATION_FAILED", "message": "Some details need fixing.", "fields": { "parentEmail": "Invalid email address" } } }
+{
+  "error": {
+    "code": "VALIDATION_FAILED",
+    "message": "Some details need fixing.",
+    "fields": { "parentEmail": "Invalid email address" }
+  }
+}
 ```
 
-| Code | Status | When |
-|---|---|---|
-| `VALIDATION_FAILED` | 400 | the body fails validation, isn't JSON, is too large or can't be read |
-| `SLOT_UNAVAILABLE` | 409 | a well-formed request for a time that can't be booked now: it is outside the booking window (2 hours to 14 days ahead) or nobody is free |
-| `NOT_FOUND` | 404 | no such booking, or no such `/api` endpoint |
-| `INTERNAL` | 500 | anything else; the message is generic and the details are logged |
+| Code                | Status | When                                                                                                                                     |
+| ------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `VALIDATION_FAILED` | 400    | the body fails validation, isn't JSON, is too large or can't be read                                                                     |
+| `SLOT_UNAVAILABLE`  | 409    | a well-formed request for a time that can't be booked now: it is outside the booking window (2 hours to 14 days ahead) or nobody is free |
+| `NOT_FOUND`         | 404    | no such booking, or no such `/api` endpoint                                                                                              |
+| `INTERNAL`          | 500    | anything else; the message is generic and the details are logged                                                                         |
 
 The examples below ran against a fresh database under `DEMO_NOW=2026-10-20T12:00:00Z`. Output is pretty-printed and trimmed where marked `…`. Booking ids and class links are random.
 
@@ -172,7 +178,12 @@ curl -s -X POST localhost:3000/api/bookings -H 'content-type: application/json' 
 The same body for the seeded full hour, `2026-10-26T16:00:00Z`, returns 409:
 
 ```json
-{ "error": { "code": "SLOT_UNAVAILABLE", "message": "That time is no longer available. Please pick another." } }
+{
+  "error": {
+    "code": "SLOT_UNAVAILABLE",
+    "message": "That time is no longer available. Please pick another."
+  }
+}
 ```
 
 A bad body returns 400 with one message per field:
@@ -306,13 +317,13 @@ AssertionError: expected [ …(2) ] to have a length of 1 but got 2
 - 1
 + 2
 
- ❯ src/server/bookings.test.ts:84:39
-     82|     bookSlot(pool, input('2026-10-27T17:00:00Z'), NOW, pause),
-     83|   ]);
-     84|   expect(results.filter((r) => r.ok)).toHaveLength(1);
+ ❯ src/server/bookings.test.ts:107:39
+    105|     bookSlot(pool, input('2026-10-27T17:00:00Z'), NOW, pause),
+    106|   ]);
+    107|   expect(results.filter((r) => r.ok)).toHaveLength(1);
        |                                       ^
-     85|   const { rows } = await pool.query(`select count(*)::int as n from bo…
-     86|   expect(rows[0].n).toBe(2);
+    108|   const { rows } = await pool.query(
+    109|     `select count(*)::int as n from bookings where mentor_local_date =…
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
 ```
@@ -335,11 +346,11 @@ All conversions and display formats live in one dependency-free file, `src/share
 
 **The same mentor hour across the autumn changes.** A mentor teaching at 8:30 PM every weekday in Kolkata:
 
-| Mentor's 8:30 PM in Kolkata | London | New York | Phoenix |
-|---|---|---|---|
-| Fri 23 Oct | 4:00 PM BST | 11:00 AM EDT | 8:00 AM MST |
-| Tue 27 Oct | 3:00 PM **GMT** | 11:00 AM EDT | 8:00 AM MST |
-| Tue 3 Nov | 3:00 PM GMT | 10:00 AM **EST** | 8:00 AM MST |
+| Mentor's 8:30 PM in Kolkata | London          | New York         | Phoenix     |
+| --------------------------- | --------------- | ---------------- | ----------- |
+| Fri 23 Oct                  | 4:00 PM BST     | 11:00 AM EDT     | 8:00 AM MST |
+| Tue 27 Oct                  | 3:00 PM **GMT** | 11:00 AM EDT     | 8:00 AM MST |
+| Tue 3 Nov                   | 3:00 PM GMT     | 10:00 AM **EST** | 8:00 AM MST |
 
 The class never moves for the mentor. Each parent sees it shift on their own change date. For one week (25 Oct–1 Nov), London is 4 hours ahead of New York instead of 5. Phoenix never moves, because Arizona doesn't observe DST.
 
@@ -361,7 +372,7 @@ This is the same rule as Temporal's default disambiguation (`'compatible'`).
 
 **The parent's day vs the mentor's day.** A Los Angeles parent's Mon 26 Oct, 6:00 PM PDT is Tue 27 Oct, 6:30 AM in Kolkata. It shows under Monday for the parent and counts toward Tuesday for the mentor.
 
-**Ireland.** In the tz database's main format, Irish *winter* is marked as the daylight-saving period (a negative offset change). Many runtimes ship a compatibility version that flips it back. So code that reads a DST flag can get Ireland backwards, depending on which format of the data a library uses. This app only ever asks "what's the offset at this instant?", so Dublin comes out right: UTC+0 in January and UTC+1 in July, shown as "GMT" and "IST". Dublin has its own test.
+**Ireland.** In the tz database's main format, Irish _winter_ is marked as the daylight-saving period (a negative offset change). Many runtimes ship a compatibility version that flips it back. So code that reads a DST flag can get Ireland backwards, depending on which format of the data a library uses. This app only ever asks "what's the offset at this instant?", so Dublin comes out right: UTC+0 in January and UTC+1 in July, shown as "GMT" and "IST". Dublin has its own test.
 
 **Renamed zones.** Node's ICU reports India as `Asia/Calcutta`; the seed stores `Asia/Kolkata`. Both validate and both display as "Kolkata". Comparisons between zones use ICU's canonical form, so the zone picker shows exactly one Kolkata option.
 
@@ -415,6 +426,7 @@ This is the same rule as Temporal's default disambiguation (`'compatible'`).
 docker-compose.yml          the stack: db, mailpit, app, and test (under a profile)
 Dockerfile                  deps, build, test and runtime stages
 .dockerignore
+.prettierrc.json            Prettier: single quotes, 100 columns
 package.json                scripts; npm test runs Vitest under three host zones
 tsconfig.json               compiler rules (erasable syntax only)
 vite.config.ts              Vite build, dev proxy for /api, Vitest timeouts

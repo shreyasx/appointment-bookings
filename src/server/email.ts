@@ -3,14 +3,25 @@ import { cityName, formatDate, formatOtherTime, formatSpan, formatWhen } from '.
 
 export type EmailMessage = { to: string; subject: string; text: string };
 export type Mailer = { send(message: EmailMessage): Promise<void> };
-export type EmailBooking = { id: string; startsAt: Date; parentName: string; parentEmail: string; childName: string; parentTimeZone: string;
-  classLink: string; mentor: { name: string; email: string; timeZone: string } };
+export type EmailBooking = {
+  id: string;
+  startsAt: Date;
+  parentName: string;
+  parentEmail: string;
+  childName: string;
+  parentTimeZone: string;
+  classLink: string;
+  mentor: { name: string; email: string; timeZone: string };
+};
 
 const CLASS_MINUTES = 60;
 const first = (name: string) => name.trim().split(/\s+/)[0] ?? name;
 
 /** One email per side; each leads with its reader's own time and adds the other side's time (with its date when the days differ). */
-export function renderEmails(b: EmailBooking, appUrl: string): { parent: EmailMessage; mentor: EmailMessage } {
+export function renderEmails(
+  b: EmailBooking,
+  appUrl: string,
+): { parent: EmailMessage; mentor: EmailMessage } {
   const start = b.startsAt;
   const end = new Date(start.getTime() + CLASS_MINUTES * 60_000);
   const { mentor } = b;
@@ -40,8 +51,16 @@ export function renderEmails(b: EmailBooking, appUrl: string): { parent: EmailMe
   ];
 
   return {
-    parent: { to: b.parentEmail, subject: `${b.childName}'s free trial class: ${formatWhen(start, b.parentTimeZone)}`, text: parent.join('\n') },
-    mentor: { to: mentor.email, subject: `New trial class: ${formatWhen(start, mentor.timeZone)}`, text: mentorText.join('\n') },
+    parent: {
+      to: b.parentEmail,
+      subject: `${b.childName}'s free trial class: ${formatWhen(start, b.parentTimeZone)}`,
+      text: parent.join('\n'),
+    },
+    mentor: {
+      to: mentor.email,
+      subject: `New trial class: ${formatWhen(start, mentor.timeZone)}`,
+      text: mentorText.join('\n'),
+    },
   };
 }
 
@@ -50,7 +69,12 @@ export function createSmtpMailer(smtpUrl: string): Mailer {
   const transport = nodemailer.createTransport(smtpUrl);
   return {
     async send({ to, subject, text }) {
-      await transport.sendMail({ from: 'Codeyoung Trials <trials@codeyoung.example>', to, subject, text });
+      await transport.sendMail({
+        from: 'Codeyoung Trials <trials@codeyoung.example>',
+        to,
+        subject,
+        text,
+      });
     },
   };
 }

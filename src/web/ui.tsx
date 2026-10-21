@@ -2,17 +2,24 @@ import type { ReactNode } from 'react';
 import { cityName, formatDateWithYear, formatTime } from '../shared/time.ts';
 
 export function Card({ children }: { children: ReactNode }) {
-  return <div className="mx-auto w-full max-w-[440px] rounded-card border border-line bg-white p-8 shadow-card">{children}</div>;
+  return (
+    <div className="mx-auto w-full max-w-[440px] rounded-card border border-line bg-white p-8 shadow-card">
+      {children}
+    </div>
+  );
 }
 
 /** Every primary button: full width, 14px bold, 16px vertical padding. */
-export const primaryButton = 'block w-full rounded-cta bg-brand py-4 text-center text-sm font-bold text-ink';
+export const primaryButton =
+  'block w-full rounded-cta bg-brand py-4 text-center text-sm font-bold text-ink';
 
 export function NotFoundCard({ title }: { title: string }) {
   return (
     <Card>
       <h1 className="text-2xl font-medium">{title}</h1>
-      <a href="/" className="mt-4 inline-block font-bold underline underline-offset-4">Back to the home page</a>
+      <a href="/" className="mt-4 inline-block font-bold underline underline-offset-4">
+        Back to the home page
+      </a>
     </Card>
   );
 }
@@ -20,7 +27,9 @@ export function NotFoundCard({ title }: { title: string }) {
 export function CardTitle() {
   return (
     <h1 className="text-2xl font-medium">
-      Book a <span className="underline decoration-brand decoration-4 underline-offset-4">FREE</span> class for your child
+      Book a{' '}
+      <span className="underline decoration-brand decoration-4 underline-offset-4">FREE</span> class
+      for your child
     </h1>
   );
 }
@@ -46,9 +55,16 @@ export function DemoBanner({ now, timeZone }: { now: string; timeZone: string })
 
 /** Initials in a soft square, for the mentor cards. */
 export function Avatar({ name }: { name: string }) {
-  const initials = name.split(/\s+/).map((word) => word[0]).slice(0, 2).join('');
+  const initials = name
+    .split(/\s+/)
+    .map((word) => word[0])
+    .slice(0, 2)
+    .join('');
   return (
-    <span aria-hidden="true" className="flex size-12 shrink-0 items-center justify-center rounded-cta bg-brand-100 font-bold">
+    <span
+      aria-hidden="true"
+      className="flex size-12 shrink-0 items-center justify-center rounded-cta bg-brand-100 font-bold"
+    >
       {initials}
     </span>
   );

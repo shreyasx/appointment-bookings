@@ -1,22 +1,54 @@
-import { useEffect, useId, useReducer, useRef, type FormEvent, type InputHTMLAttributes, type ReactNode, type RefObject } from 'react';
+import {
+  useEffect,
+  useId,
+  useReducer,
+  useRef,
+  type FormEvent,
+  type InputHTMLAttributes,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 import { flushSync } from 'react-dom';
-import { cityName, formatDate, formatDayKey, formatTime, isValidTimeZone, localDate, zoneAbbreviation } from '../shared/time.ts';
+import {
+  cityName,
+  formatDate,
+  formatDayKey,
+  formatTime,
+  isValidTimeZone,
+  localDate,
+  zoneAbbreviation,
+} from '../shared/time.ts';
 import { ApiError } from './api.ts';
 import {
-  clockChange, DAYS_SHOWN, dayMixesOffsets, dayStatus, flowReducer, groupIntoDays, initialFlow, nearestOpenDays, nearestOpenTimes, sameZone,
-  shownDayKey, zoneOptions, type Day, type Details,
+  clockChange,
+  DAYS_SHOWN,
+  dayMixesOffsets,
+  dayStatus,
+  flowReducer,
+  groupIntoDays,
+  initialFlow,
+  nearestOpenDays,
+  nearestOpenTimes,
+  sameZone,
+  shownDayKey,
+  zoneOptions,
+  type Day,
+  type Details,
 } from './booking.ts';
 import { useBookSlot, useSlots, useTimeZone } from './hooks.ts';
 import { Card, CardTitle, DemoBanner, primaryButton, Progress } from './ui.tsx';
 
 // The day and slot radios are sr-only, so the global :focus-visible ring paints the hidden input. The visible box gets the same ring.
-const peerRing = 'peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ink peer-focus-visible:ring-4 peer-focus-visible:ring-brand';
+const peerRing =
+  'peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ink peer-focus-visible:ring-4 peer-focus-visible:ring-brand';
 const optionButton = 'rounded-field border border-field bg-white px-3 py-2 font-medium';
 const NOTHING_OPEN = `No times are open in the next ${DAYS_SHOWN} days. Please check back soon.`;
 
 const DETAIL_FIELDS = ['parentName', 'parentEmail', 'childName'] as const;
-const fieldErrors = (error: unknown): Record<string, string> => (error instanceof ApiError && error.status === 400 ? error.fields : {});
-const hasDetailErrors = (error: unknown) => DETAIL_FIELDS.some((field) => fieldErrors(error)[field]);
+const fieldErrors = (error: unknown): Record<string, string> =>
+  error instanceof ApiError && error.status === 400 ? error.fields : {};
+const hasDetailErrors = (error: unknown) =>
+  DETAIL_FIELDS.some((field) => fieldErrors(error)[field]);
 
 export function BookingPage() {
   const [state, dispatch] = useReducer(flowReducer, initialFlow);
@@ -57,7 +89,9 @@ export function BookingPage() {
   if (state.step === 'details') {
     return frame(
       <>
-        <h2 ref={heading} tabIndex={-1} className="mt-6 text-lg font-bold">Your details</h2>
+        <h2 ref={heading} tabIndex={-1} className="mt-6 text-lg font-bold">
+          Your details
+        </h2>
         <DetailsForm
           details={state.details}
           errors={fieldErrors(book.error)}
@@ -81,9 +115,14 @@ export function BookingPage() {
         onClick={() => dispatch({ type: 'back' })}
         className="-ml-2 rounded-field p-1 enabled:hover:bg-brand-50 disabled:cursor-not-allowed disabled:text-ink-soft"
       >
-        <Icon><path d="m12 19-7-7 7-7" /><path d="M19 12H5" /></Icon>
+        <Icon>
+          <path d="m12 19-7-7 7-7" />
+          <path d="M19 12H5" />
+        </Icon>
       </button>
-      <h2 ref={heading} tabIndex={-1} className="text-lg font-bold">Pick a time</h2>
+      <h2 ref={heading} tabIndex={-1} className="text-lg font-bold">
+        Pick a time
+      </h2>
     </div>
   );
 
@@ -94,10 +133,18 @@ export function BookingPage() {
         {error && !isFetching ? (
           <div className="mt-6">
             <p role="alert">We couldn't load times.</p>
-            <button type="button" onClick={() => void refetch()} className="mt-2 font-bold underline underline-offset-4">Try again</button>
+            <button
+              type="button"
+              onClick={() => void refetch()}
+              className="mt-2 font-bold underline underline-offset-4"
+            >
+              Try again
+            </button>
           </div>
         ) : (
-          <p role="status" className="mt-6">Loading times…</p>
+          <p role="status" className="mt-6">
+            Loading times…
+          </p>
         )}
       </>,
     );
@@ -116,7 +163,9 @@ export function BookingPage() {
   // the shown day can move to a chip scrolled out of sight, leaving nothing on screen that names it
   const changeZone = (tz: string) => {
     flushSync(() => setTimeZone(tz));
-    dayRow.current?.querySelector('input:checked')?.parentElement?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    dayRow.current
+      ?.querySelector('input:checked')
+      ?.parentElement?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   };
 
   const confirm = () => {
@@ -141,18 +190,28 @@ export function BookingPage() {
         {isValidTimeZone(deviceTimeZone) && !sameZone(timeZone, deviceTimeZone) && (
           <p className="mt-2 text-sm text-ink-soft">
             Your device is set to {deviceCity} time.{' '}
-            <button type="button" onClick={() => changeZone(deviceTimeZone)} className="font-bold text-ink underline underline-offset-4">
+            <button
+              type="button"
+              onClick={() => changeZone(deviceTimeZone)}
+              className="font-bold text-ink underline underline-offset-4"
+            >
               Use {deviceCity} time
             </button>
           </p>
         )}
       </div>
 
-      <DayChips days={days} value={key} rowRef={dayRow} onChange={(dayKey) => dispatch({ type: 'daySelected', dayKey })} />
+      <DayChips
+        days={days}
+        value={key}
+        rowRef={dayRow}
+        onChange={(dayKey) => dispatch({ type: 'daySelected', dayKey })}
+      />
 
       {change && key >= change.dayKey && (
         <p className="mt-4 rounded-field bg-brand-50 p-3 text-sm">
-          Clocks in {cityName(timeZone)} change on {formatDayKey(change.dayKey)}. Times from then on are {change.to}, not {change.from}.
+          Clocks in {cityName(timeZone)} change on {formatDayKey(change.dayKey)}. Times from then on
+          are {change.to}, not {change.from}.
           {dayMixesOffsets(day, timeZone) && ' On this day each time shows its zone.'}
         </p>
       )}
@@ -188,11 +247,15 @@ export function BookingPage() {
           }}
         />
       )}
-      {bookError && !(bookError instanceof ApiError && bookError.status === 409) && !hasDetailErrors(bookError) && (
-        <p role="alert" className="mt-4 text-sm text-alert">
-          {fieldErrors(bookError).parentTimeZone ? 'Please pick your time zone from the list.' : bookError.message}
-        </p>
-      )}
+      {bookError &&
+        !(bookError instanceof ApiError && bookError.status === 409) &&
+        !hasDetailErrors(bookError) && (
+          <p role="alert" className="mt-4 text-sm text-alert">
+            {fieldErrors(bookError).parentTimeZone
+              ? 'Please pick your time zone from the list.'
+              : bookError.message}
+          </p>
+        )}
 
       <button
         ref={confirmButton}
@@ -201,7 +264,11 @@ export function BookingPage() {
         onClick={confirm}
         className={`mt-6 ${primaryButton} disabled:cursor-not-allowed disabled:bg-full disabled:text-ink-soft`}
       >
-        {busy ? 'Booking…' : selected ? `Confirm ${formatWhenShort(new Date(selected), timeZone)}` : 'Choose a time'}
+        {busy
+          ? 'Booking…'
+          : selected
+            ? `Confirm ${formatWhenShort(new Date(selected), timeZone)}`
+            : 'Choose a time'}
       </button>
     </>,
   );
@@ -212,28 +279,69 @@ function formatWhenShort(at: Date, tz: string): string {
   return `${formatDate(at, tz)}, ${formatTime(at, tz)} ${zoneAbbreviation(at, tz)}`;
 }
 
-function DetailsForm({ details, errors, onSubmit }: { details: Details; errors: Record<string, string>; onSubmit: (details: Details) => void }) {
+function DetailsForm({
+  details,
+  errors,
+  onSubmit,
+}: {
+  details: Details;
+  errors: Record<string, string>;
+  onSubmit: (details: Details) => void;
+}) {
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const value = (name: keyof Details) => String(form.get(name)).trim();
-    onSubmit({ parentName: value('parentName'), parentEmail: value('parentEmail'), childName: value('childName') });
+    onSubmit({
+      parentName: value('parentName'),
+      parentEmail: value('parentEmail'),
+      childName: value('childName'),
+    });
   };
   return (
     <form onSubmit={submit} className="mt-4 flex flex-col gap-4">
-      <Field name="parentName" label="Parent's name" autoComplete="name" defaultValue={details.parentName} error={errors.parentName} />
-      <Field name="parentEmail" label="Parent's email" type="email" autoComplete="email" maxLength={254} defaultValue={details.parentEmail} error={errors.parentEmail} />
-      <Field name="childName" label="Child's name" autoComplete="off" defaultValue={details.childName} error={errors.childName} />
-      <button type="submit" className={`mt-2 ${primaryButton}`}>Choose a time</button>
+      <Field
+        name="parentName"
+        label="Parent's name"
+        autoComplete="name"
+        defaultValue={details.parentName}
+        error={errors.parentName}
+      />
+      <Field
+        name="parentEmail"
+        label="Parent's email"
+        type="email"
+        autoComplete="email"
+        maxLength={254}
+        defaultValue={details.parentEmail}
+        error={errors.parentEmail}
+      />
+      <Field
+        name="childName"
+        label="Child's name"
+        autoComplete="off"
+        defaultValue={details.childName}
+        error={errors.childName}
+      />
+      <button type="submit" className={`mt-2 ${primaryButton}`}>
+        Choose a time
+      </button>
     </form>
   );
 }
 
-function Field({ name, label, error, ...input }: { name: keyof Details; label: string; error?: string } & InputHTMLAttributes<HTMLInputElement>) {
+function Field({
+  name,
+  label,
+  error,
+  ...input
+}: { name: keyof Details; label: string; error?: string } & InputHTMLAttributes<HTMLInputElement>) {
   const id = useId();
   return (
     <div>
-      <label htmlFor={id} className="mb-1 block text-sm font-medium">{label}</label>
+      <label htmlFor={id} className="mb-1 block text-sm font-medium">
+        {label}
+      </label>
       <input
         maxLength={80}
         {...input}
@@ -244,21 +352,50 @@ function Field({ name, label, error, ...input }: { name: keyof Details; label: s
         aria-describedby={error ? `${id}-error` : undefined}
         className="w-full rounded-field border border-field bg-white p-3 text-base aria-invalid:border-alert"
       />
-      {error && <p id={`${id}-error`} className="mt-1 text-sm text-alert">{error}</p>}
+      {error && (
+        <p id={`${id}-error`} className="mt-1 text-sm text-alert">
+          {error}
+        </p>
+      )}
     </div>
   );
 }
 
-function ZonePill({ timeZone, now, onChange }: { timeZone: string; now: Date; onChange: (tz: string) => void }) {
+function ZonePill({
+  timeZone,
+  now,
+  onChange,
+}: {
+  timeZone: string;
+  now: Date;
+  onChange: (tz: string) => void;
+}) {
   const options = zoneOptions(timeZone, now); // a shared, cached array: read it, never change it
   const group = (name: 'common' | 'all') =>
-    options.filter((o) => o.group === name).map((o) => <option key={o.value} value={o.value}>{o.label}</option>);
+    options
+      .filter((o) => o.group === name)
+      .map((o) => (
+        <option key={o.value} value={o.value}>
+          {o.label}
+        </option>
+      ));
   return (
     <div className="relative inline-flex items-center gap-2 rounded-cta border border-field bg-white px-4 py-2 text-sm font-medium has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-ink has-focus-visible:ring-4 has-focus-visible:ring-brand">
-      <Icon><circle cx="12" cy="12" r="10" /><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" /><path d="M2 12h20" /></Icon>
+      <Icon>
+        <circle cx="12" cy="12" r="10" />
+        <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" />
+        <path d="M2 12h20" />
+      </Icon>
       {cityName(timeZone)}
-      <Icon><path d="m6 9 6 6 6-6" /></Icon>
-      <select aria-label="Time zone" value={timeZone} onChange={(e) => onChange(e.target.value)} className="absolute inset-0 cursor-pointer opacity-0">
+      <Icon>
+        <path d="m6 9 6 6 6-6" />
+      </Icon>
+      <select
+        aria-label="Time zone"
+        value={timeZone}
+        onChange={(e) => onChange(e.target.value)}
+        className="absolute inset-0 cursor-pointer opacity-0"
+      >
         <optgroup label="Common">{group('common')}</optgroup>
         <optgroup label="All time zones">{group('all')}</optgroup>
       </select>
@@ -266,29 +403,66 @@ function ZonePill({ timeZone, now, onChange }: { timeZone: string; now: Date; on
   );
 }
 
-function DayChips({ days, value, rowRef, onChange }: { days: Day[]; value: string; rowRef: RefObject<HTMLDivElement | null>; onChange: (dayKey: string) => void }) {
-  const scroll = (direction: 1 | -1) => rowRef.current?.scrollBy({ left: direction * rowRef.current.clientWidth });
+function DayChips({
+  days,
+  value,
+  rowRef,
+  onChange,
+}: {
+  days: Day[];
+  value: string;
+  rowRef: RefObject<HTMLDivElement | null>;
+  onChange: (dayKey: string) => void;
+}) {
+  const scroll = (direction: 1 | -1) =>
+    rowRef.current?.scrollBy({ left: direction * rowRef.current.clientWidth });
   const arrow = 'shrink-0 rounded-field p-1 text-ink-soft hover:bg-brand-50 hover:text-ink';
   return (
-    <fieldset className="mt-6 min-w-0">{/* a fieldset is min-content wide by default, which would stretch the card to fit all 14 chips */}
+    <fieldset className="mt-6 min-w-0">
+      {/* a fieldset is min-content wide by default, which would stretch the card to fit all 14 chips */}
       <legend className="sr-only">Day</legend>
       <div className="flex items-center gap-1">
-        <button type="button" aria-label="Earlier days" onClick={() => scroll(-1)} className={arrow}>
-          <Icon><path d="m15 18-6-6 6-6" /></Icon>
+        <button
+          type="button"
+          aria-label="Earlier days"
+          onClick={() => scroll(-1)}
+          className={arrow}
+        >
+          <Icon>
+            <path d="m15 18-6-6 6-6" />
+          </Icon>
         </button>
         {/* the padding leaves room for the focus ring, which the scroll box would clip */}
-        <div ref={rowRef} className="flex min-w-0 flex-1 scroll-smooth gap-2 overflow-x-auto p-1 motion-reduce:scroll-auto">
+        <div
+          ref={rowRef}
+          className="flex min-w-0 flex-1 scroll-smooth gap-2 overflow-x-auto p-1 motion-reduce:scroll-auto"
+        >
           {days.map((d) => {
             const [weekday, ...date] = formatDayKey(d.key).split(' ');
             const status = dayStatus(d);
             return (
               <label key={d.key} className="relative shrink-0">
-                <input type="radio" name="day" value={d.key} checked={d.key === value} onChange={() => onChange(d.key)} className="peer sr-only" />
-                <span className={`flex w-18 cursor-pointer flex-col overflow-hidden rounded-field border border-field text-center peer-checked:border-ink peer-checked:bg-brand-100 ${d.openCount ? 'bg-white' : 'bg-full text-ink-soft'} ${peerRing}`}>
+                <input
+                  type="radio"
+                  name="day"
+                  value={d.key}
+                  checked={d.key === value}
+                  onChange={() => onChange(d.key)}
+                  className="peer sr-only"
+                />
+                <span
+                  className={`flex w-18 cursor-pointer flex-col overflow-hidden rounded-field border border-field text-center peer-checked:border-ink peer-checked:bg-brand-100 ${d.openCount ? 'bg-white' : 'bg-full text-ink-soft'} ${peerRing}`}
+                >
                   <span className="pt-2 text-xs">{weekday}</span>{' '}
                   <span className="pb-2 font-bold">{date.join(' ')}</span>{' '}
                   <span className={`py-1 text-xs ${d.openCount ? 'bg-brand-50' : ''}`}>
-                    {status === 'none' ? 'No slots' : status === 'full' ? 'Full' : d.openCount === 1 ? '1 slot' : `${d.openCount} slots`}
+                    {status === 'none'
+                      ? 'No slots'
+                      : status === 'full'
+                        ? 'Full'
+                        : d.openCount === 1
+                          ? '1 slot'
+                          : `${d.openCount} slots`}
                   </span>
                 </span>
               </label>
@@ -296,14 +470,26 @@ function DayChips({ days, value, rowRef, onChange }: { days: Day[]; value: strin
           })}
         </div>
         <button type="button" aria-label="Later days" onClick={() => scroll(1)} className={arrow}>
-          <Icon><path d="m9 18 6-6-6-6" /></Icon>
+          <Icon>
+            <path d="m9 18 6-6-6-6" />
+          </Icon>
         </button>
       </div>
     </fieldset>
   );
 }
 
-function SlotGrid({ day, timeZone, selected, onSelect }: { day: Day; timeZone: string; selected: string | null; onSelect: (startsAt: string) => void }) {
+function SlotGrid({
+  day,
+  timeZone,
+  selected,
+  onSelect,
+}: {
+  day: Day;
+  timeZone: string;
+  selected: string | null;
+  onSelect: (startsAt: string) => void;
+}) {
   const showZone = dayMixesOffsets(day, timeZone); // the change day repeats or skips an hour, so a bare "1:00 AM" would be ambiguous
   return (
     <fieldset className="mt-4">
@@ -322,20 +508,40 @@ function SlotGrid({ day, timeZone, selected, onSelect }: { day: Day; timeZone: s
                 onChange={() => onSelect(s.startsAt)}
                 className="peer sr-only"
               />
-              <span className={`flex cursor-pointer flex-col items-center rounded-field border border-field bg-white py-3 text-sm font-medium peer-checked:border-ink peer-checked:bg-brand peer-checked:font-bold peer-disabled:cursor-not-allowed peer-disabled:border-line peer-disabled:bg-full peer-disabled:text-ink-soft ${peerRing}`}>
-                {formatTime(at, timeZone)}{showZone && ` ${zoneAbbreviation(at, timeZone)}`}
-                {!s.available && <>{' '}<span className="text-xs">Full</span></>}
+              <span
+                className={`flex cursor-pointer flex-col items-center rounded-field border border-field bg-white py-3 text-sm font-medium peer-checked:border-ink peer-checked:bg-brand peer-checked:font-bold peer-disabled:cursor-not-allowed peer-disabled:border-line peer-disabled:bg-full peer-disabled:text-ink-soft ${peerRing}`}
+              >
+                {formatTime(at, timeZone)}
+                {showZone && ` ${zoneAbbreviation(at, timeZone)}`}
+                {!s.available && (
+                  <>
+                    {' '}
+                    <span className="text-xs">Full</span>
+                  </>
+                )}
               </span>
             </label>
           );
         })}
       </div>
-      {day.slots.some((s) => !s.available) && <p className="mt-3 text-sm text-ink-soft">Greyed-out times are full: every mentor is booked then.</p>}
+      {day.slots.some((s) => !s.available) && (
+        <p className="mt-3 text-sm text-ink-soft">
+          Greyed-out times are full: every mentor is booked then.
+        </p>
+      )}
     </fieldset>
   );
 }
 
-function EmptyDay({ days, dayKey, onJump }: { days: Day[]; dayKey: string; onJump: (dayKey: string) => void }) {
+function EmptyDay({
+  days,
+  dayKey,
+  onJump,
+}: {
+  days: Day[];
+  dayKey: string;
+  onJump: (dayKey: string) => void;
+}) {
   const { before, after } = nearestOpenDays(days, dayKey);
   const nearest = [before, after].filter((d) => d !== null);
   const full = dayStatus(days.find((d) => d.key === dayKey)!) === 'full';
@@ -344,14 +550,21 @@ function EmptyDay({ days, dayKey, onJump }: { days: Day[]; dayKey: string; onJum
       <p className="font-bold">
         {full
           ? `Every mentor is booked on ${formatDayKey(dayKey)}.`
-          : dayKey === days[0]!.key ? 'No times are left today.' : `There are no times on ${formatDayKey(dayKey)}.`}
+          : dayKey === days[0]!.key
+            ? 'No times are left today.'
+            : `There are no times on ${formatDayKey(dayKey)}.`}
       </p>
       {nearest.length ? (
         <>
           <p className="mt-1">The nearest days with open times:</p>
           <div className="mt-3 flex flex-wrap gap-2">
             {nearest.map((d) => (
-              <button key={d.key} type="button" onClick={() => onJump(d.key)} className={optionButton}>
+              <button
+                key={d.key}
+                type="button"
+                onClick={() => onJump(d.key)}
+                className={optionButton}
+              >
                 {formatDayKey(d.key)} · {d.openCount} {d.openCount === 1 ? 'time' : 'times'}
               </button>
             ))}
@@ -364,24 +577,46 @@ function EmptyDay({ days, dayKey, onJump }: { days: Day[]; dayKey: string; onJum
   );
 }
 
-function UnavailableAlert({ ref, startsAt, alternatives, timeZone, shownKey, onPick }: {
-  ref: RefObject<HTMLDivElement | null>; startsAt: string; alternatives: string[]; timeZone: string; shownKey: string; onPick: (startsAt: string) => void;
+function UnavailableAlert({
+  ref,
+  startsAt,
+  alternatives,
+  timeZone,
+  shownKey,
+  onPick,
+}: {
+  ref: RefObject<HTMLDivElement | null>;
+  startsAt: string;
+  alternatives: string[];
+  timeZone: string;
+  shownKey: string;
+  onPick: (startsAt: string) => void;
 }) {
   const at = new Date(startsAt);
   return (
-    <div ref={ref} role="alert" tabIndex={-1} className="mt-4 rounded-field border border-alert bg-alert-50 p-4 text-sm">
+    <div
+      ref={ref}
+      role="alert"
+      tabIndex={-1}
+      className="mt-4 rounded-field border border-alert bg-alert-50 p-4 text-sm"
+    >
       <p className="font-bold text-alert">
-        Sorry, {formatTime(at, timeZone)} {zoneAbbreviation(at, timeZone)} on {formatDate(at, timeZone)} is no longer available.
+        Sorry, {formatTime(at, timeZone)} {zoneAbbreviation(at, timeZone)} on{' '}
+        {formatDate(at, timeZone)} is no longer available.
       </p>
       {alternatives.length ? (
         <>
-          <p className="mt-1">The nearest open times are below. Pick one and confirm again. Your details are kept.</p>
+          <p className="mt-1">
+            The nearest open times are below. Pick one and confirm again. Your details are kept.
+          </p>
           <div className="mt-3 flex flex-wrap gap-2">
             {alternatives.map((t) => {
               const alt = new Date(t);
               return (
                 <button key={t} type="button" onClick={() => onPick(t)} className={optionButton}>
-                  {localDate(alt, timeZone) === shownKey ? `${formatTime(alt, timeZone)} ${zoneAbbreviation(alt, timeZone)}` : formatWhenShort(alt, timeZone)}
+                  {localDate(alt, timeZone) === shownKey
+                    ? `${formatTime(alt, timeZone)} ${zoneAbbreviation(alt, timeZone)}`
+                    : formatWhenShort(alt, timeZone)}
                 </button>
               );
             })}
@@ -396,7 +631,16 @@ function UnavailableAlert({ ref, startsAt, alternatives, timeZone, shownKey, onP
 
 function Icon({ children }: { children: ReactNode }) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="size-5 shrink-0">
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className="size-5 shrink-0"
+    >
       {children}
     </svg>
   );

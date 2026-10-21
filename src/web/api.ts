@@ -1,11 +1,23 @@
-import type { ApiErrorBody, BookingRequest, BookingResponse, ErrorCode, MentorsResponse, SlotsResponse } from '../shared/types.ts';
+import type {
+  ApiErrorBody,
+  BookingRequest,
+  BookingResponse,
+  ErrorCode,
+  MentorsResponse,
+  SlotsResponse,
+} from '../shared/types.ts';
 
 export class ApiError extends Error {
   status: number;
   code: ErrorCode;
   fields: Record<string, string>;
 
-  constructor(status: number, code: ErrorCode, message: string, fields: Record<string, string> = {}) {
+  constructor(
+    status: number,
+    code: ErrorCode,
+    message: string,
+    fields: Record<string, string> = {},
+  ) {
     super(message);
     this.status = status;
     this.code = code;
@@ -19,7 +31,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     res = await fetch(path, init);
   } catch {
     // offline or the server is down: a 5xx so queries retry it
-    throw new ApiError(503, 'INTERNAL', "We can't reach the server. Check your connection and try again.");
+    throw new ApiError(
+      503,
+      'INTERNAL',
+      "We can't reach the server. Check your connection and try again.",
+    );
   }
   const body: unknown = await res.json().catch(() => null);
   if (res.ok) {
@@ -27,12 +43,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     return body as T;
   }
   const error = (body as ApiErrorBody | null)?.error;
-  throw new ApiError(res.status, error?.code ?? 'INTERNAL', error?.message ?? 'Something went wrong. Please try again.', error?.fields);
+  throw new ApiError(
+    res.status,
+    error?.code ?? 'INTERNAL',
+    error?.message ?? 'Something went wrong. Please try again.',
+    error?.fields,
+  );
 }
 
 export const getSlots = () => request<SlotsResponse>('/api/slots');
 export const getMentors = () => request<MentorsResponse>('/api/mentors');
-export const getBooking = (id: string) => request<BookingResponse>('/api/bookings/' + encodeURIComponent(id));
+export const getBooking = (id: string) =>
+  request<BookingResponse>('/api/bookings/' + encodeURIComponent(id));
 export const createBooking = (body: BookingRequest) =>
   request<BookingResponse>('/api/bookings', {
     method: 'POST',

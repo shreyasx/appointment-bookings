@@ -1,18 +1,18 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 @theme {
-  --font-sans: "Satoshi", ui-sans-serif, system-ui, sans-serif;
-  --color-brand: #FBB600;      /* main accent: CTAs, selected chip, progress */
-  --color-brand-50: #FFF8E6;   /* soft fill: slot-count strip, notices */
-  --color-brand-100: #FFE9AD;  /* selected chip */
-  --color-ink: #2F4F4F;        /* all text, including on yellow (5:1) */
-  --color-ink-soft: #4F6B6B;   /* secondary text (5.5:1 on page) */
-  --color-line: #E6E6E6;       /* card border */
-  --color-field: #7F9999;      /* field, chip and slot borders (3:1) */
-  --color-page: #FAFAFA;       /* page background */
-  --color-full: #F1F3F3;       /* full slot / full day */
-  --color-alert: #B42318;
-  --color-alert-50: #FEF3F2;
+  --font-sans: 'Satoshi', ui-sans-serif, system-ui, sans-serif;
+  --color-brand: #fbb600; /* main accent: CTAs, selected chip, progress */
+  --color-brand-50: #fff8e6; /* soft fill: slot-count strip, notices */
+  --color-brand-100: #ffe9ad; /* selected chip */
+  --color-ink: #2f4f4f; /* all text, including on yellow (5:1) */
+  --color-ink-soft: #4f6b6b; /* secondary text (5.5:1 on page) */
+  --color-line: #e6e6e6; /* card border */
+  --color-field: #7f9999; /* field, chip and slot borders (3:1) */
+  --color-page: #fafafa; /* page background */
+  --color-full: #f1f3f3; /* full slot / full day */
+  --color-alert: #b42318;
+  --color-alert-50: #fef3f2;
   --radius-card: 24px;
   --radius-cta: 16px;
   --radius-field: 8px;

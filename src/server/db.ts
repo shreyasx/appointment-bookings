@@ -26,7 +26,9 @@ export async function migrate(pool: pg.Pool): Promise<string[]> {
     await client.query(
       'create table if not exists schema_migrations (name text primary key, applied_at timestamptz not null default now())',
     );
-    const done = new Set((await client.query('select name from schema_migrations')).rows.map((r) => r.name));
+    const done = new Set(
+      (await client.query('select name from schema_migrations')).rows.map((r) => r.name),
+    );
     const applied: string[] = [];
     for (const name of (await readdir(dir)).filter((f) => f.endsWith('.sql')).sort()) {
       if (done.has(name)) continue;

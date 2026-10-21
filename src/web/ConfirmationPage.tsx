@@ -7,13 +7,16 @@ export function ConfirmationPage({ id }: { id: string }) {
   const { data, error } = useQuery({ queryKey: ['booking', id], queryFn: () => getBooking(id) });
 
   if (!data) {
-    if (error instanceof ApiError && error.status === 404) return <NotFoundCard title="We couldn't find that booking." />;
+    if (error instanceof ApiError && error.status === 404)
+      return <NotFoundCard title="We couldn't find that booking." />;
     return (
       <Card>
         {!error ? (
           <p role="status">Loading your booking…</p>
         ) : (
-          <p role="alert" className="text-alert">We couldn't load your booking. Please refresh the page to try again.</p>
+          <p role="alert" className="text-alert">
+            We couldn't load your booking. Please refresh the page to try again.
+          </p>
         )}
       </Card>
     );
@@ -35,10 +38,14 @@ export function ConfirmationPage({ id }: { id: string }) {
         <p>{formatSpan(start, end, tz)}</p>
       </div>
       <p className="mt-3 text-sm text-ink-soft">
-        Your mentor joins from {cityName(b.mentor.timeZone)}, where it's {formatOtherTime(start, b.mentor.timeZone, tz)}.
+        Your mentor joins from {cityName(b.mentor.timeZone)}, where it's{' '}
+        {formatOtherTime(start, b.mentor.timeZone, tz)}.
       </p>
 
-      <section aria-label="Your mentor" className="mt-6 flex gap-4 rounded-field border border-line p-4">
+      <section
+        aria-label="Your mentor"
+        className="mt-6 flex gap-4 rounded-field border border-line p-4"
+      >
         <Avatar name={b.mentor.name} />
         <div>
           <h2 className="font-bold">{b.mentor.name}</h2>
@@ -47,12 +54,7 @@ export function ConfirmationPage({ id }: { id: string }) {
         </div>
       </section>
 
-      <a
-        href={b.classLink}
-        target="_blank"
-        rel="noreferrer"
-        className={`mt-6 ${primaryButton}`}
-      >
+      <a href={b.classLink} target="_blank" rel="noreferrer" className={`mt-6 ${primaryButton}`}>
         Join class
       </a>
       <p className="mt-2 break-all text-center text-sm text-ink-soft">{b.classLink}</p>

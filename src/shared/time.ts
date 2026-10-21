@@ -3,7 +3,11 @@
 const formatters = new Map<string, Intl.DateTimeFormat>();
 
 // Slot building calls these hundreds of times per request, so formatters are built once per locale, zone and options.
-function formatter(locale: string, timeZone: string, options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+function formatter(
+  locale: string,
+  timeZone: string,
+  options: Intl.DateTimeFormatOptions,
+): Intl.DateTimeFormat {
   const key = `${locale}|${timeZone}|${JSON.stringify(options)}`;
   let f = formatters.get(key);
   if (!f) {
@@ -38,7 +42,11 @@ export function offsetMinutes(at: Date, tz: string): number {
 
 /** The calendar date at `at` in `tz`, as 'YYYY-MM-DD'. */
 export function localDate(at: Date, tz: string): string {
-  const parts = formatter('en-US', tz, { year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(at);
+  const parts = formatter('en-US', tz, {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(at);
   const part = (type: string) => parts.find((p) => p.type === type)?.value;
   return `${part('year')}-${part('month')}-${part('day')}`;
 }
@@ -114,7 +122,9 @@ export function canonicalTimeZone(tz: string): string {
 
 /** '4:00 PM', with a plain space where ICU puts a narrow no-break one. */
 export function formatTime(at: Date, tz: string): string {
-  return formatter('en-US', tz, { hour: 'numeric', minute: '2-digit' }).format(at).replace(/\u202f/g, ' ');
+  return formatter('en-US', tz, { hour: 'numeric', minute: '2-digit' })
+    .format(at)
+    .replace(/\u202f/g, ' ');
 }
 
 /** 'Tue 27 Oct' */

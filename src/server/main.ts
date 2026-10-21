@@ -5,7 +5,13 @@ import { createPool, migrate } from './db.ts';
 import { createSmtpMailer } from './email.ts';
 import { seed } from './seed.ts';
 
-const { DATABASE_URL = 'postgres://bookings:bookings@localhost:5433/bookings', SMTP_URL = 'smtp://localhost:1025', APP_URL = 'http://localhost:3000', PORT = '3000', DEMO_NOW } = process.env;
+const {
+  DATABASE_URL = 'postgres://bookings:bookings@localhost:5433/bookings',
+  SMTP_URL = 'smtp://localhost:1025',
+  APP_URL = 'http://localhost:3000',
+  PORT = '3000',
+  DEMO_NOW,
+} = process.env;
 
 const clock = createClock(DEMO_NOW);
 const pool = createPool(DATABASE_URL);

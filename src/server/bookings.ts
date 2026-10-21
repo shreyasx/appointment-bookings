@@ -3,8 +3,20 @@ import type pg from 'pg';
 import { localDate } from '../shared/time.ts';
 import { DAILY_CAP, isBookableTime, worksAt, type ActiveBooking, type Mentor } from './slots.ts';
 
-export type BookingInput = { startsAt: Date; parentName: string; parentEmail: string; childName: string; parentTimeZone: string };
-export type Booking = BookingInput & { id: string; mentorId: number; mentorLocalDate: string; classLink: string; cancelledAt: Date | null };
+export type BookingInput = {
+  startsAt: Date;
+  parentName: string;
+  parentEmail: string;
+  childName: string;
+  parentTimeZone: string;
+};
+export type Booking = BookingInput & {
+  id: string;
+  mentorId: number;
+  mentorLocalDate: string;
+  classLink: string;
+  cancelledAt: Date | null;
+};
 export type BookResult = { ok: true; booking: Booking } | { ok: false; code: 'SLOT_UNAVAILABLE' };
 
 const UNAVAILABLE = { ok: false, code: 'SLOT_UNAVAILABLE' } as const;
@@ -32,7 +44,9 @@ function toBooking(r: any): Booking {
 export async function loadMentors(pool: pg.Pool): Promise<Mentor[]> {
   const [mentors, hours] = await Promise.all([
     pool.query('select id, name, email, bio, subjects, time_zone from mentors order by id'),
-    pool.query('select mentor_id, weekday, start_time, end_time from mentor_hours order by mentor_id, weekday, start_time'),
+    pool.query(
+      'select mentor_id, weekday, start_time, end_time from mentor_hours order by mentor_id, weekday, start_time',
+    ),
   ]);
   return mentors.rows.map((m) => ({
     id: m.id,
@@ -43,17 +57,29 @@ export async function loadMentors(pool: pg.Pool): Promise<Mentor[]> {
     timeZone: m.time_zone,
     hours: hours.rows
       .filter((h) => h.mentor_id === m.id)
-      .map((h) => ({ weekday: h.weekday, start: h.start_time.slice(0, 5), end: h.end_time.slice(0, 5) })),
+      .map((h) => ({
+        weekday: h.weekday,
+        start: h.start_time.slice(0, 5),
+        end: h.end_time.slice(0, 5),
+      })),
   }));
 }
 
 /** Active bookings with from <= starts_at < to. */
-export async function loadActiveBookings(pool: pg.Pool, from: Date, to: Date): Promise<ActiveBooking[]> {
+export async function loadActiveBookings(
+  pool: pg.Pool,
+  from: Date,
+  to: Date,
+): Promise<ActiveBooking[]> {
   const { rows } = await pool.query(
     'select mentor_id, starts_at, mentor_local_date from bookings where cancelled_at is null and starts_at >= $1 and starts_at < $2',
     [from, to],
   );
-  return rows.map((r) => ({ mentorId: r.mentor_id, startsAt: r.starts_at, mentorLocalDate: r.mentor_local_date }));
+  return rows.map((r) => ({
+    mentorId: r.mentor_id,
+    startsAt: r.starts_at,
+    mentorLocalDate: r.mentor_local_date,
+  }));
 }
 
 /** Books the hour with the least-booked free mentor (lowest id on a tie), or says SLOT_UNAVAILABLE. Never sends email. */
@@ -77,7 +103,9 @@ export async function bookSlot(
      group by mentor_id, mentor_local_date`,
     [candidates.map((c) => c.mentor.id), candidates.map((c) => c.date)],
   );
-  const load = new Map<string, number>(rows.map((r) => [`${r.mentor_id}|${r.mentor_local_date}`, r.n]));
+  const load = new Map<string, number>(
+    rows.map((r) => [`${r.mentor_id}|${r.mentor_local_date}`, r.n]),
+  );
   const loadOf = (c: (typeof candidates)[number]) => load.get(`${c.mentor.id}|${c.date}`) ?? 0;
   candidates.sort((a, b) => loadOf(a) - loadOf(b) || a.mentor.id - b.mentor.id);
 
@@ -86,12 +114,18 @@ export async function bookSlot(
     try {
       await client.query('begin isolation level read committed');
       await client.query('select id from mentors where id = $1 for update', [mentor.id]); // the turnstile: bookings for one mentor take turns (spec §6); relies on read committed
-      const hour = await client.query('select 1 from bookings where mentor_id = $1 and starts_at = $2 and cancelled_at is null', [mentor.id, input.startsAt]);
+      const hour = await client.query(
+        'select 1 from bookings where mentor_id = $1 and starts_at = $2 and cancelled_at is null',
+        [mentor.id, input.startsAt],
+      );
       if (hour.rowCount) {
         await client.query('rollback');
         continue;
       }
-      const day = await client.query('select count(*)::int as n from bookings where mentor_id = $1 and mentor_local_date = $2 and cancelled_at is null', [mentor.id, date]);
+      const day = await client.query(
+        'select count(*)::int as n from bookings where mentor_id = $1 and mentor_local_date = $2 and cancelled_at is null',
+        [mentor.id, date],
+      );
       if (day.rows[0].n >= DAILY_CAP) {
         await client.query('rollback');
         continue;
@@ -100,7 +134,16 @@ export async function bookSlot(
       const { rows: inserted } = await client.query(
         `insert into bookings (mentor_id, starts_at, mentor_local_date, parent_name, parent_email, child_name, parent_time_zone, class_link)
          values ($1, $2, $3, $4, $5, $6, $7, $8) returning *`,
-        [mentor.id, input.startsAt, date, input.parentName, input.parentEmail, input.childName, input.parentTimeZone, newClassLink()],
+        [
+          mentor.id,
+          input.startsAt,
+          date,
+          input.parentName,
+          input.parentEmail,
+          input.childName,
+          input.parentTimeZone,
+          newClassLink(),
+        ],
       );
       await client.query('commit');
       return { ok: true, booking: toBooking(inserted[0]) };
@@ -114,7 +157,10 @@ export async function bookSlot(
   return UNAVAILABLE;
 }
 
-export async function getBookingWithMentor(pool: pg.Pool, id: string): Promise<{ booking: Booking; mentor: Mentor } | null> {
+export async function getBookingWithMentor(
+  pool: pg.Pool,
+  id: string,
+): Promise<{ booking: Booking; mentor: Mentor } | null> {
   const { rows } = await pool.query('select * from bookings where id = $1', [id]);
   if (!rows[0]) return null;
   const booking = toBooking(rows[0]);

@@ -5,11 +5,13 @@
 **Goal:** A web app where a US or UK parent books a free trial class, the system assigns an available mentor in India, and both sides see the time in their own zone. It never overbooks a mentor and never shows a misleading time.
 
 **Architecture:** One package and one Docker Compose stack.
+
 - **Server:** Express 5 serves a small JSON API and the built React app. Postgres enforces the booking rules: a row lock per mentor plus a partial unique index.
 - **Shared time module:** one dependency-free `Intl`-only file used by both server and browser, so the UI and the emails format time identically.
 - **Browser:** gets a flat list of UTC instants and groups them into the parent's local days.
 
 **Tech Stack:**
+
 - Node (server TypeScript runs via Node's type stripping), Express 5, Zod 4, `pg`, nodemailer, Postgres 17, Mailpit.
 - React with Vite, TanStack Query, Tailwind CSS v4.
 - Vitest and supertest.
@@ -69,42 +71,45 @@
 ## Before you start (main session, once)
 
 The repository has no commits yet.
+
 1. Create `.gitignore` containing `node_modules/`, `dist/`, `.playwright-mcp/`, `.superpowers/`, `*.log` and `.DS_Store`.
 2. Commit `.gitignore` and `docs/` to `main` as the first commit: `docs: add trial booking design and implementation plan`.
 3. All tasks below commit straight to `main` (the author's call: no feature branch).
 
 ## File map
 
-| Path | Responsibility |
-|---|---|
-| `package.json`, `tsconfig.json`, `vite.config.ts` | scripts, compiler rules, Vite + Vitest config |
-| `docker-compose.yml`, `Dockerfile`, `.dockerignore` | the stack: `db`, `mailpit`, `app`, `test` |
-| `migrations/001_init.sql` | schema (spec §11, verbatim) |
-| `src/shared/time.ts` | every time-zone conversion and display format |
-| `src/shared/types.ts` | API request/response types shared by server and web |
-| `src/server/db.ts` | pool (with the `date` parser) and the migration runner |
-| `src/server/test-db.ts` | test-only helpers: a throwaway database per test file, `insertMentor` |
-| `src/server/slots.ts` | pure slot rules: working hours → class starts, availability |
-| `src/server/bookings.ts` | data access and the `bookSlot` transaction |
-| `src/server/email.ts` | pure email rendering and the SMTP mailer |
-| `src/server/app.ts` | `createClock`, `createApp`: routes, validation, error middleware, static files |
-| `src/server/seed.ts` | 10 mentors, their hours, pre-booked classes |
-| `src/server/main.ts` | entry: migrate → seed → listen |
-| `src/web/booking.ts` | pure browser logic: day grouping, nearest alternatives, zone options, the flow reducer |
-| `src/web/api.ts`, `src/web/hooks.ts` | typed fetch client; `useTimeZone`, `useSlots`, `useBookSlot` |
-| `src/web/ui.tsx` | small shared pieces: `Card`, `CardTitle`, `Progress`, `DemoBanner` |
-| `src/web/App.tsx`, `main.tsx`, `index.css`, `index.html` | shell, path switch, `@theme`, entry |
-| `src/web/BookingPage.tsx`, `ConfirmationPage.tsx`, `MentorsPage.tsx` | the three pages |
-| `README.md` | submission docs (`TRANSCRIPT.md` is added by the author at the end, outside this plan) |
+| Path                                                                 | Responsibility                                                                         |
+| -------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `package.json`, `tsconfig.json`, `vite.config.ts`                    | scripts, compiler rules, Vite + Vitest config                                          |
+| `docker-compose.yml`, `Dockerfile`, `.dockerignore`                  | the stack: `db`, `mailpit`, `app`, `test`                                              |
+| `migrations/001_init.sql`                                            | schema (spec §11, verbatim)                                                            |
+| `src/shared/time.ts`                                                 | every time-zone conversion and display format                                          |
+| `src/shared/types.ts`                                                | API request/response types shared by server and web                                    |
+| `src/server/db.ts`                                                   | pool (with the `date` parser) and the migration runner                                 |
+| `src/server/test-db.ts`                                              | test-only helpers: a throwaway database per test file, `insertMentor`                  |
+| `src/server/slots.ts`                                                | pure slot rules: working hours → class starts, availability                            |
+| `src/server/bookings.ts`                                             | data access and the `bookSlot` transaction                                             |
+| `src/server/email.ts`                                                | pure email rendering and the SMTP mailer                                               |
+| `src/server/app.ts`                                                  | `createClock`, `createApp`: routes, validation, error middleware, static files         |
+| `src/server/seed.ts`                                                 | 10 mentors, their hours, pre-booked classes                                            |
+| `src/server/main.ts`                                                 | entry: migrate → seed → listen                                                         |
+| `src/web/booking.ts`                                                 | pure browser logic: day grouping, nearest alternatives, zone options, the flow reducer |
+| `src/web/api.ts`, `src/web/hooks.ts`                                 | typed fetch client; `useTimeZone`, `useSlots`, `useBookSlot`                           |
+| `src/web/ui.tsx`                                                     | small shared pieces: `Card`, `CardTitle`, `Progress`, `DemoBanner`                     |
+| `src/web/App.tsx`, `main.tsx`, `index.css`, `index.html`             | shell, path switch, `@theme`, entry                                                    |
+| `src/web/BookingPage.tsx`, `ConfirmationPage.tsx`, `MentorsPage.tsx` | the three pages                                                                        |
+| `README.md`                                                          | submission docs (`TRANSCRIPT.md` is added by the author at the end, outside this plan) |
 
 ---
 
 ### Task 1: Project scaffold and time conversions
 
 **Files:**
+
 - Create: `package.json`, `tsconfig.json`, `vite.config.ts`, `src/shared/time.ts`, `src/shared/time.test.ts` (plus the generated `package-lock.json`)
 
 **Interfaces:**
+
 - Consumes: nothing.
 - Produces (`src/shared/time.ts`):
   - `isValidTimeZone(tz: string): boolean`
@@ -141,20 +146,32 @@ The repository has no commits yet.
 }
 ```
 
-  - `vite.config.ts`: `import { defineConfig } from 'vitest/config'; export default defineConfig({ test: { testTimeout: 20_000, hookTimeout: 20_000 } });`
+- `vite.config.ts`: `import { defineConfig } from 'vitest/config'; export default defineConfig({ test: { testTimeout: 20_000, hookTimeout: 20_000 } });`
 
 - [ ] **Step 2: Write the failing tests** in `src/shared/time.test.ts`
 
 ```ts
 import { expect, test } from 'vitest';
-import { addDays, isValidTimeZone, localDate, offsetMinutes, weekdayOf, zonedTimeToInstant } from './time.ts';
+import {
+  addDays,
+  isValidTimeZone,
+  localDate,
+  offsetMinutes,
+  weekdayOf,
+  zonedTimeToInstant,
+} from './time.ts';
 
 test.each([
-  ['America/New_York', '2026-01-15T12:00:00Z', -300], ['America/New_York', '2026-07-15T12:00:00Z', -240],
-  ['America/Phoenix', '2026-01-15T12:00:00Z', -420], ['America/Phoenix', '2026-07-15T12:00:00Z', -420],
-  ['Europe/London', '2026-01-15T12:00:00Z', 0], ['Europe/London', '2026-07-15T12:00:00Z', 60],
-  ['Europe/Dublin', '2026-01-15T12:00:00Z', 0], ['Europe/Dublin', '2026-07-15T12:00:00Z', 60],
-  ['Asia/Kolkata', '2026-01-15T12:00:00Z', 330], ['Asia/Kathmandu', '2026-07-15T12:00:00Z', 345],
+  ['America/New_York', '2026-01-15T12:00:00Z', -300],
+  ['America/New_York', '2026-07-15T12:00:00Z', -240],
+  ['America/Phoenix', '2026-01-15T12:00:00Z', -420],
+  ['America/Phoenix', '2026-07-15T12:00:00Z', -420],
+  ['Europe/London', '2026-01-15T12:00:00Z', 0],
+  ['Europe/London', '2026-07-15T12:00:00Z', 60],
+  ['Europe/Dublin', '2026-01-15T12:00:00Z', 0],
+  ['Europe/Dublin', '2026-07-15T12:00:00Z', 60],
+  ['Asia/Kolkata', '2026-01-15T12:00:00Z', 330],
+  ['Asia/Kathmandu', '2026-07-15T12:00:00Z', 345],
 ])('offsetMinutes(%s, %s) is %i', (tz, at, minutes) => {
   expect(offsetMinutes(new Date(at), tz)).toBe(minutes);
 });
@@ -163,9 +180,9 @@ test.each([
   ['2026-10-27', '20:30', 'Asia/Kolkata', '2026-10-27T15:00:00.000Z'],
   ['2026-03-08', '02:00', 'America/New_York', '2026-03-08T07:00:00.000Z'], // gap: 2:00 becomes 3:00 EDT
   ['2026-03-08', '02:30', 'America/New_York', '2026-03-08T07:30:00.000Z'], // gap: 2:30 becomes 3:30 EDT
-  ['2026-03-29', '01:30', 'Europe/London', '2026-03-29T01:30:00.000Z'],    // gap: 1:30 becomes 2:30 BST
+  ['2026-03-29', '01:30', 'Europe/London', '2026-03-29T01:30:00.000Z'], // gap: 1:30 becomes 2:30 BST
   ['2026-11-01', '01:30', 'America/New_York', '2026-11-01T05:30:00.000Z'], // repeated hour: first (EDT)
-  ['2026-10-25', '01:30', 'Europe/London', '2026-10-25T00:30:00.000Z'],    // repeated hour: first (BST)
+  ['2026-10-25', '01:30', 'Europe/London', '2026-10-25T00:30:00.000Z'], // repeated hour: first (BST)
 ])('zonedTimeToInstant(%s %s, %s) is %s', (date, time, tz, expected) => {
   expect(zonedTimeToInstant(date, time, tz).toISOString()).toBe(expected);
 });
@@ -178,12 +195,18 @@ test('one instant falls on different calendar days', () => {
 
 test('calendar helpers', () => {
   expect([weekdayOf('2026-10-25'), weekdayOf('2026-10-27')]).toEqual([0, 2]);
-  expect([addDays('2026-10-31', 1), addDays('2026-11-01', -1)]).toEqual(['2026-11-01', '2026-10-31']);
+  expect([addDays('2026-10-31', 1), addDays('2026-11-01', -1)]).toEqual([
+    '2026-11-01',
+    '2026-10-31',
+  ]);
 });
 
-test.each(['Asia/Kolkata', 'Asia/Calcutta', 'Europe/Dublin', 'UTC', 'US/Eastern'])('accepts %s', (tz) => {
-  expect(isValidTimeZone(tz)).toBe(true);
-});
+test.each(['Asia/Kolkata', 'Asia/Calcutta', 'Europe/Dublin', 'UTC', 'US/Eastern'])(
+  'accepts %s',
+  (tz) => {
+    expect(isValidTimeZone(tz)).toBe(true);
+  },
+);
 test.each(['IST', 'EST', 'GMT', 'Mars/Olympus', '', 'GMT+5:30x'])('rejects %j', (tz) => {
   expect(isValidTimeZone(tz)).toBe(false);
 });
@@ -204,7 +227,7 @@ Expected: FAIL, failing to resolve `./time.ts`.
   - `zonedTimeToInstant` must use this algorithm (it gives Temporal's `'compatible'` behaviour):
 
 ```ts
-const wall = Date.UTC(y, m - 1, d, hh, mm, ss);          // the wall-clock reading as if it were UTC
+const wall = Date.UTC(y, m - 1, d, hh, mm, ss); // the wall-clock reading as if it were UTC
 const early = offsetMinutes(new Date(wall - 86_400_000), tz);
 const late = offsetMinutes(new Date(wall + 86_400_000), tz);
 const valid = [early, late]
@@ -236,9 +259,11 @@ git commit -m "feat(time): add intl-only zone conversions with dst gap and overl
 ### Task 2: Time display formatting
 
 **Files:**
+
 - Modify: `src/shared/time.ts`, `src/shared/time.test.ts`
 
 **Interfaces:**
+
 - Consumes: `offsetMinutes`, `localDate` (Task 1).
 - Produces (`src/shared/time.ts`):
   - `formatOffset(minutes: number): string`: `'GMT'`, `'GMT+1'`, `'GMT+5:30'`, `'GMT-4'`
@@ -268,38 +293,74 @@ test.each([
 ])('formatWhen(%s, %s)', (at, tz, expected) => expect(formatWhen(new Date(at), tz)).toBe(expected));
 
 test.each([
-  ['2026-07-15T12:00:00Z', 'Europe/Dublin', 'IST'], ['2026-01-15T12:00:00Z', 'Europe/Dublin', 'GMT'],
-  ['2026-01-15T12:00:00Z', 'America/Phoenix', 'MST'], ['2026-07-15T12:00:00Z', 'America/Phoenix', 'MST'],
-  ['2026-07-15T12:00:00Z', 'America/New_York', 'EDT'], ['2026-07-15T12:00:00Z', 'Asia/Tokyo', 'GMT+9'],
-])('zoneAbbreviation(%s, %s) is %s', (at, tz, expected) => expect(zoneAbbreviation(new Date(at), tz)).toBe(expected));
+  ['2026-07-15T12:00:00Z', 'Europe/Dublin', 'IST'],
+  ['2026-01-15T12:00:00Z', 'Europe/Dublin', 'GMT'],
+  ['2026-01-15T12:00:00Z', 'America/Phoenix', 'MST'],
+  ['2026-07-15T12:00:00Z', 'America/Phoenix', 'MST'],
+  ['2026-07-15T12:00:00Z', 'America/New_York', 'EDT'],
+  ['2026-07-15T12:00:00Z', 'Asia/Tokyo', 'GMT+9'],
+])('zoneAbbreviation(%s, %s) is %s', (at, tz, expected) =>
+  expect(zoneAbbreviation(new Date(at), tz)).toBe(expected),
+);
 
 test.each([
   ['2026-10-27T16:00:00Z', '2026-10-27T17:00:00Z', 'Europe/London', '4:00–5:00 PM GMT (London)'],
-  ['2026-10-27T11:00:00Z', '2026-10-27T12:00:00Z', 'Europe/London', '11:00 AM–12:00 PM GMT (London)'],
-  ['2026-10-25T00:00:00Z', '2026-10-25T01:00:00Z', 'Europe/London', '1:00 AM BST–1:00 AM GMT (London)'],
+  [
+    '2026-10-27T11:00:00Z',
+    '2026-10-27T12:00:00Z',
+    'Europe/London',
+    '11:00 AM–12:00 PM GMT (London)',
+  ],
+  [
+    '2026-10-25T00:00:00Z',
+    '2026-10-25T01:00:00Z',
+    'Europe/London',
+    '1:00 AM BST–1:00 AM GMT (London)',
+  ],
   ['2026-10-27T16:00:00Z', '2026-10-27T17:00:00Z', 'Asia/Kolkata', '9:30–10:30 PM IST (Kolkata)'],
 ])('formatSpan(%s, %s, %s)', (start, end, tz, expected) => {
   expect(formatSpan(new Date(start), new Date(end), tz)).toBe(expected);
 });
 
 test('dates, cities, offsets and picker labels', () => {
-  expect(formatDateWithYear(new Date('2026-10-27T16:00:00Z'), 'Europe/London')).toBe('Tue 27 Oct 2026');
+  expect(formatDateWithYear(new Date('2026-10-27T16:00:00Z'), 'Europe/London')).toBe(
+    'Tue 27 Oct 2026',
+  );
   expect(formatDayKey('2026-10-25')).toBe('Sun 25 Oct');
-  expect(['America/New_York', 'America/Indiana/Indianapolis', 'Asia/Calcutta', 'Europe/Kiev', 'UTC'].map(cityName))
-    .toEqual(['New York', 'Indianapolis', 'Kolkata', 'Kyiv', 'UTC']);
-  expect([0, 60, 330, -240, 345].map(formatOffset)).toEqual(['GMT', 'GMT+1', 'GMT+5:30', 'GMT-4', 'GMT+5:45']);
-  expect(formatZoneOption(new Date('2026-07-15T12:00:00Z'), 'Europe/London')).toBe('London (GMT+1)');
+  expect(
+    ['America/New_York', 'America/Indiana/Indianapolis', 'Asia/Calcutta', 'Europe/Kiev', 'UTC'].map(
+      cityName,
+    ),
+  ).toEqual(['New York', 'Indianapolis', 'Kolkata', 'Kyiv', 'UTC']);
+  expect([0, 60, 330, -240, 345].map(formatOffset)).toEqual([
+    'GMT',
+    'GMT+1',
+    'GMT+5:30',
+    'GMT-4',
+    'GMT+5:45',
+  ]);
+  expect(formatZoneOption(new Date('2026-07-15T12:00:00Z'), 'Europe/London')).toBe(
+    'London (GMT+1)',
+  );
   expect(formatZoneOption(new Date('2026-01-15T12:00:00Z'), 'Europe/London')).toBe('London (GMT)');
-  expect(formatZoneOption(new Date('2026-07-15T12:00:00Z'), 'Asia/Kolkata')).toBe('Kolkata (GMT+5:30)');
+  expect(formatZoneOption(new Date('2026-07-15T12:00:00Z'), 'Asia/Kolkata')).toBe(
+    'Kolkata (GMT+5:30)',
+  );
   expect(canonicalTimeZone('Asia/Kolkata')).toBe(canonicalTimeZone('Asia/Calcutta'));
   expect(formatTime(new Date('2026-10-27T16:00:00Z'), 'Europe/London')).not.toMatch(/\u202f/);
 });
 
 test("the other side's time carries its date when the two sides are on different days", () => {
   const usEvening = new Date('2026-10-26T21:00:00Z'); // Mon 5:00 PM in New York = Tue 2:30 AM in Kolkata
-  expect(formatOtherTime(new Date('2026-10-27T16:00:00Z'), 'Asia/Kolkata', 'Europe/London')).toBe('9:30 PM IST');
-  expect(formatOtherTime(usEvening, 'Asia/Kolkata', 'America/New_York')).toBe('Tue 27 Oct, 2:30 AM IST');
-  expect(formatOtherTime(usEvening, 'America/New_York', 'Asia/Kolkata')).toBe('Mon 26 Oct, 5:00 PM EDT');
+  expect(formatOtherTime(new Date('2026-10-27T16:00:00Z'), 'Asia/Kolkata', 'Europe/London')).toBe(
+    '9:30 PM IST',
+  );
+  expect(formatOtherTime(usEvening, 'Asia/Kolkata', 'America/New_York')).toBe(
+    'Tue 27 Oct, 2:30 AM IST',
+  );
+  expect(formatOtherTime(usEvening, 'America/New_York', 'Asia/Kolkata')).toBe(
+    'Mon 26 Oct, 5:00 PM EDT',
+  );
 });
 ```
 
@@ -343,10 +404,12 @@ git commit -m "feat(time): format times with locally used zone names and city"
 ### Task 3: Database: schema, migrations, test databases
 
 **Files:**
+
 - Create: `docker-compose.yml`, `migrations/001_init.sql`, `src/server/db.ts`, `src/server/test-db.ts`, `src/server/db.test.ts`
 - Modify: `package.json` (dependency `pg`; dev dependency `@types/pg`)
 
 **Interfaces:**
+
 - Consumes: nothing.
 - Produces:
   - `src/server/db.ts`:
@@ -378,18 +441,30 @@ import { migrate } from './db.ts';
 import { createTestDb, insertMentor, type TestDb } from './test-db.ts';
 
 let db: TestDb;
-beforeAll(async () => { db = await createTestDb(); });
+beforeAll(async () => {
+  db = await createTestDb();
+});
 afterAll(() => db.drop());
 
-const insertBooking = (mentorId: number, startsAt: string, localDay: string) => db.pool.query(
-  `insert into bookings (mentor_id, starts_at, mentor_local_date, parent_name, parent_email, child_name, parent_time_zone, class_link)
+const insertBooking = (mentorId: number, startsAt: string, localDay: string) =>
+  db.pool.query(
+    `insert into bookings (mentor_id, starts_at, mentor_local_date, parent_name, parent_email, child_name, parent_time_zone, class_link)
    values ($1, $2, $3, 'Asha Patel', 'asha@example.com', 'Rohan', 'Europe/London', 'https://classroom.example/trial/x')
-   returning id, mentor_local_date`, [mentorId, startsAt, localDay]);
+   returning id, mentor_local_date`,
+    [mentorId, startsAt, localDay],
+  );
 
 test('migrate is idempotent and creates the tables', async () => {
   expect(await migrate(db.pool)).toEqual([]);
-  const { rows } = await db.pool.query(`select table_name from information_schema.tables where table_schema = 'public' order by 1`);
-  expect(rows.map((r) => r.table_name)).toEqual(['bookings', 'mentor_hours', 'mentors', 'schema_migrations']);
+  const { rows } = await db.pool.query(
+    `select table_name from information_schema.tables where table_schema = 'public' order by 1`,
+  );
+  expect(rows.map((r) => r.table_name)).toEqual([
+    'bookings',
+    'mentor_hours',
+    'mentors',
+    'schema_migrations',
+  ]);
 });
 
 test('date columns come back as plain strings in any host time zone', async () => {
@@ -401,7 +476,9 @@ test('date columns come back as plain strings in any host time zone', async () =
 test('a mentor can have only one active booking per hour', async () => {
   const mentorId = await insertMentor(db.pool, { timeZone: 'Asia/Kolkata', hours: [] });
   const first = await insertBooking(mentorId, '2026-10-28T15:00:00Z', '2026-10-28');
-  await expect(insertBooking(mentorId, '2026-10-28T15:00:00Z', '2026-10-28')).rejects.toMatchObject({ code: '23505' });
+  await expect(insertBooking(mentorId, '2026-10-28T15:00:00Z', '2026-10-28')).rejects.toMatchObject(
+    { code: '23505' },
+  );
   await db.pool.query('update bookings set cancelled_at = now() where id = $1', [first.rows[0].id]);
   await expect(insertBooking(mentorId, '2026-10-28T15:00:00Z', '2026-10-28')).resolves.toBeTruthy();
 });
@@ -430,7 +507,7 @@ Expected: FAIL, failing to resolve `./db.ts`.
     - a unique email `m-<random>@mentors.example`;
     - bio `'Test mentor'`, subjects `{Coding}`;
     - the hours rows.
-    It returns the id.
+      It returns the id.
 
 - [ ] **Step 6: Run the tests and see them pass in all three host zones**
 
@@ -449,22 +526,35 @@ git commit -m "feat(db): add schema, migration runner and per-file test database
 ### Task 4: Slot rules (pure)
 
 **Files:**
+
 - Create: `src/server/slots.ts`, `src/server/slots.test.ts`
 
 **Interfaces:**
+
 - Consumes: `zonedTimeToInstant`, `localDate`, `weekdayOf`, `addDays` (Task 1).
 - Produces (`src/server/slots.ts`):
 
 ```ts
-export const CLASS_MINUTES = 60, LEAD_MINUTES = 120, HORIZON_DAYS = 14, DAILY_CAP = 2;
-export type WorkingHours = { weekday: number; start: string; end: string };   // 'HH:MM', in the mentor's own time zone
-export type Mentor = { id: number; name: string; email: string; bio: string; subjects: string[]; timeZone: string; hours: WorkingHours[] };
+export const CLASS_MINUTES = 60,
+  LEAD_MINUTES = 120,
+  HORIZON_DAYS = 14,
+  DAILY_CAP = 2;
+export type WorkingHours = { weekday: number; start: string; end: string }; // 'HH:MM', in the mentor's own time zone
+export type Mentor = {
+  id: number;
+  name: string;
+  email: string;
+  bio: string;
+  subjects: string[];
+  timeZone: string;
+  hours: WorkingHours[];
+};
 export type ActiveBooking = { mentorId: number; startsAt: Date; mentorLocalDate: string };
 export type Slot = { startsAt: Date; available: boolean };
-export function isBookableTime(startsAt: Date, now: Date): boolean;            // on the UTC hour, within [now+120min, now+14d]
-export function worksAt(mentor: Mentor, startsAt: Date): boolean;              // the whole class fits one working-hours window
-export function classStarts(mentor: Mentor, from: Date, to: Date): Date[];     // sorted, unique, inside [from, to]
-export function buildSlots(mentors: Mentor[], bookings: ActiveBooking[], now: Date): Slot[];  // sorted by startsAt
+export function isBookableTime(startsAt: Date, now: Date): boolean; // on the UTC hour, within [now+120min, now+14d]
+export function worksAt(mentor: Mentor, startsAt: Date): boolean; // the whole class fits one working-hours window
+export function classStarts(mentor: Mentor, from: Date, to: Date): Date[]; // sorted, unique, inside [from, to]
+export function buildSlots(mentors: Mentor[], bookings: ActiveBooking[], now: Date): Slot[]; // sorted by startsAt
 ```
 
 - [ ] **Step 1: Write the failing tests** in `src/server/slots.test.ts`
@@ -472,24 +562,53 @@ export function buildSlots(mentors: Mentor[], bookings: ActiveBooking[], now: Da
 ```ts
 import { expect, test } from 'vitest';
 import { localDate } from '../shared/time.ts';
-import { buildSlots, classStarts, isBookableTime, worksAt, type ActiveBooking, type Mentor, type Slot, type WorkingHours } from './slots.ts';
+import {
+  buildSlots,
+  classStarts,
+  isBookableTime,
+  worksAt,
+  type ActiveBooking,
+  type Mentor,
+  type Slot,
+  type WorkingHours,
+} from './slots.ts';
 
 const NOW = new Date('2026-10-20T12:00:00Z');
-const hours = (weekdays: number[], start: string, end: string): WorkingHours[] => weekdays.map((weekday) => ({ weekday, start, end }));
-const mentor = (id: number, timeZone: string, h: WorkingHours[]): Mentor =>
-  ({ id, name: `M${id}`, email: `m${id}@mentors.example`, bio: '', subjects: [], timeZone, hours: h });
-const ukEvening = (id: number) => mentor(id, 'Asia/Kolkata', hours([1, 2, 3, 4, 5], '20:30', '23:30'));
+const hours = (weekdays: number[], start: string, end: string): WorkingHours[] =>
+  weekdays.map((weekday) => ({ weekday, start, end }));
+const mentor = (id: number, timeZone: string, h: WorkingHours[]): Mentor => ({
+  id,
+  name: `M${id}`,
+  email: `m${id}@mentors.example`,
+  bio: '',
+  subjects: [],
+  timeZone,
+  hours: h,
+});
+const ukEvening = (id: number) =>
+  mentor(id, 'Asia/Kolkata', hours([1, 2, 3, 4, 5], '20:30', '23:30'));
 const isoList = (dates: Date[]) => dates.map((d) => d.toISOString());
 const slotAt = (slots: Slot[], iso: string) => slots.find((s) => s.startsAt.toISOString() === iso);
-const booking = (mentorId: number, iso: string, day: string): ActiveBooking => ({ mentorId, startsAt: new Date(iso), mentorLocalDate: day });
+const booking = (mentorId: number, iso: string, day: string): ActiveBooking => ({
+  mentorId,
+  startsAt: new Date(iso),
+  mentorLocalDate: day,
+});
 
 test('weekly hours become class starts on the UTC hour', () => {
-  expect(isoList(classStarts(ukEvening(1), new Date('2026-10-27T00:00:00Z'), new Date('2026-10-28T00:00:00Z'))))
-    .toEqual(['2026-10-27T15:00:00.000Z', '2026-10-27T16:00:00.000Z', '2026-10-27T17:00:00.000Z']);
+  expect(
+    isoList(
+      classStarts(ukEvening(1), new Date('2026-10-27T00:00:00Z'), new Date('2026-10-28T00:00:00Z')),
+    ),
+  ).toEqual(['2026-10-27T15:00:00.000Z', '2026-10-27T16:00:00.000Z', '2026-10-27T17:00:00.000Z']);
 });
 
 test('the window runs from 2 hours to 14 days ahead, both inclusive', () => {
-  const slots = buildSlots([mentor(1, 'UTC', hours([0, 1, 2, 3, 4, 5, 6], '00:00', '23:59'))], [], NOW);
+  const slots = buildSlots(
+    [mentor(1, 'UTC', hours([0, 1, 2, 3, 4, 5, 6], '00:00', '23:59'))],
+    [],
+    NOW,
+  );
   expect(slots[0]!.startsAt.toISOString()).toBe('2026-10-20T14:00:00.000Z');
   expect(slots.at(-1)!.startsAt.toISOString()).toBe('2026-11-03T12:00:00.000Z');
   expect(isBookableTime(new Date('2026-10-20T14:00:00Z'), NOW)).toBe(true);
@@ -500,13 +619,26 @@ test('the window runs from 2 hours to 14 days ahead, both inclusive', () => {
 
 test('an hour is full only when every mentor working it is taken', () => {
   const two = [ukEvening(1), ukEvening(2)];
-  const at16 = (b: ActiveBooking[]) => slotAt(buildSlots(two, b, NOW), '2026-10-27T16:00:00.000Z')?.available;
+  const at16 = (b: ActiveBooking[]) =>
+    slotAt(buildSlots(two, b, NOW), '2026-10-27T16:00:00.000Z')?.available;
   expect(at16([booking(1, '2026-10-27T16:00:00Z', '2026-10-27')])).toBe(true);
-  expect(at16([booking(1, '2026-10-27T16:00:00Z', '2026-10-27'), booking(2, '2026-10-27T16:00:00Z', '2026-10-27')])).toBe(false);
+  expect(
+    at16([
+      booking(1, '2026-10-27T16:00:00Z', '2026-10-27'),
+      booking(2, '2026-10-27T16:00:00Z', '2026-10-27'),
+    ]),
+  ).toBe(false);
 });
 
 test("the cap closes only the rest of the mentor's own day", () => {
-  const slots = buildSlots([ukEvening(1)], [booking(1, '2026-10-27T15:00:00Z', '2026-10-27'), booking(1, '2026-10-27T16:00:00Z', '2026-10-27')], NOW);
+  const slots = buildSlots(
+    [ukEvening(1)],
+    [
+      booking(1, '2026-10-27T15:00:00Z', '2026-10-27'),
+      booking(1, '2026-10-27T16:00:00Z', '2026-10-27'),
+    ],
+    NOW,
+  );
   expect(slotAt(slots, '2026-10-27T17:00:00.000Z')?.available).toBe(false);
   expect(slotAt(slots, '2026-10-28T15:00:00.000Z')?.available).toBe(true);
 });
@@ -514,17 +646,35 @@ test("the cap closes only the rest of the mentor's own day", () => {
 test("a Los Angeles parent's Monday evening counts toward the mentor's Tuesday", () => {
   const laMonday = '2026-10-27T01:00:00Z'; // Mon 26 Oct, 6:00 PM PDT = Tue 27 Oct, 6:30 AM in Kolkata
   expect(localDate(new Date(laMonday), 'America/Los_Angeles')).toBe('2026-10-26');
-  const m = mentor(1, 'Asia/Kolkata', [...hours([2], '06:30', '07:30'), ...hours([1, 2], '20:30', '22:30')]);
-  const slots = buildSlots([m], [booking(1, laMonday, '2026-10-27'), booking(1, '2026-10-27T15:00:00Z', '2026-10-27')], NOW);
+  const m = mentor(1, 'Asia/Kolkata', [
+    ...hours([2], '06:30', '07:30'),
+    ...hours([1, 2], '20:30', '22:30'),
+  ]);
+  const slots = buildSlots(
+    [m],
+    [booking(1, laMonday, '2026-10-27'), booking(1, '2026-10-27T15:00:00Z', '2026-10-27')],
+    NOW,
+  );
   expect(slotAt(slots, '2026-10-27T16:00:00.000Z')?.available).toBe(false); // Tuesday is at the cap
-  expect(slotAt(slots, '2026-10-26T15:00:00.000Z')?.available).toBe(true);  // Monday is untouched
+  expect(slotAt(slots, '2026-10-26T15:00:00.000Z')?.available).toBe(true); // Monday is untouched
 });
 
 test("the cap uses the mentor's own day, not the UTC day", () => {
   // Tue 02:30-07:30 in Kolkata runs from Mon 26 Oct 21:00Z to Tue 27 Oct 02:00Z
   const m = mentor(1, 'Asia/Kolkata', hours([2], '02:30', '07:30'));
-  const slots = buildSlots([m], [booking(1, '2026-10-26T21:00:00Z', '2026-10-27'), booking(1, '2026-10-26T22:00:00Z', '2026-10-27')], NOW);
-  for (const iso of ['2026-10-26T23:00:00.000Z', '2026-10-27T00:00:00.000Z', '2026-10-27T01:00:00.000Z'])
+  const slots = buildSlots(
+    [m],
+    [
+      booking(1, '2026-10-26T21:00:00Z', '2026-10-27'),
+      booking(1, '2026-10-26T22:00:00Z', '2026-10-27'),
+    ],
+    NOW,
+  );
+  for (const iso of [
+    '2026-10-26T23:00:00.000Z',
+    '2026-10-27T00:00:00.000Z',
+    '2026-10-27T01:00:00.000Z',
+  ])
     expect(slotAt(slots, iso)?.available).toBe(false); // the mentor's Tuesday is full on either UTC date
   expect(slotAt(slots, '2026-11-02T21:00:00.000Z')?.available).toBe(true); // next Tuesday is open
 });
@@ -532,23 +682,33 @@ test("the cap uses the mentor's own day, not the UTC day", () => {
 test('a mentor in New York on the spring-forward day', () => {
   const ny = (start: string, end: string) => mentor(1, 'America/New_York', hours([0], start, end));
   const day = [new Date('2026-03-08T00:00:00Z'), new Date('2026-03-09T00:00:00Z')] as const;
-  expect(isoList(classStarts(ny('02:00', '05:00'), ...day))).toEqual(['2026-03-08T07:00:00.000Z', '2026-03-08T08:00:00.000Z']);
+  expect(isoList(classStarts(ny('02:00', '05:00'), ...day))).toEqual([
+    '2026-03-08T07:00:00.000Z',
+    '2026-03-08T08:00:00.000Z',
+  ]);
   expect(isoList(classStarts(ny('02:30', '05:30'), ...day))).toEqual(['2026-03-08T08:00:00.000Z']); // window starts 3:30 EDT; first class 4:00 EDT
 });
 
 test('a mentor in New York on the fall-back day', () => {
   const m = mentor(1, 'America/New_York', hours([0], '01:00', '03:00'));
-  expect(isoList(classStarts(m, new Date('2026-11-01T00:00:00Z'), new Date('2026-11-02T00:00:00Z'))))
-    .toEqual(['2026-11-01T05:00:00.000Z', '2026-11-01T06:00:00.000Z', '2026-11-01T07:00:00.000Z']);
+  expect(
+    isoList(classStarts(m, new Date('2026-11-01T00:00:00Z'), new Date('2026-11-02T00:00:00Z'))),
+  ).toEqual(['2026-11-01T05:00:00.000Z', '2026-11-01T06:00:00.000Z', '2026-11-01T07:00:00.000Z']);
 });
 
 test("US-evening hours put both of London's 1:00 AM slots on 25 Oct", () => {
-  const starts = buildSlots([mentor(6, 'Asia/Kolkata', hours([0, 2, 3, 4, 5, 6], '02:30', '07:30'))], [], NOW).map((s) => s.startsAt.toISOString());
-  expect(starts).toEqual(expect.arrayContaining(['2026-10-25T00:00:00.000Z', '2026-10-25T01:00:00.000Z']));
+  const starts = buildSlots(
+    [mentor(6, 'Asia/Kolkata', hours([0, 2, 3, 4, 5, 6], '02:30', '07:30'))],
+    [],
+    NOW,
+  ).map((s) => s.startsAt.toISOString());
+  expect(starts).toEqual(
+    expect.arrayContaining(['2026-10-25T00:00:00.000Z', '2026-10-25T01:00:00.000Z']),
+  );
 });
 
 test("worksAt fits the whole class inside the mentor's hours", () => {
-  expect(worksAt(ukEvening(1), new Date('2026-10-27T17:00:00Z'))).toBe(true);  // 10:30-11:30 PM in Kolkata
+  expect(worksAt(ukEvening(1), new Date('2026-10-27T17:00:00Z'))).toBe(true); // 10:30-11:30 PM in Kolkata
   expect(worksAt(ukEvening(1), new Date('2026-10-27T18:00:00Z'))).toBe(false); // would end after 11:30 PM
   expect(worksAt(ukEvening(1), new Date('2026-10-25T15:00:00Z'))).toBe(false); // Sunday
 });
@@ -588,10 +748,12 @@ git commit -m "feat(slots): turn weekly hours into utc class starts with cap and
 ### Task 5: Booking transaction and data access
 
 **Files:**
+
 - Create: `src/server/bookings.ts`, `src/server/bookings.test.ts`
 - Modify: `src/server/test-db.ts` (add `expectBookingRulesHold`)
 
 **Interfaces:**
+
 - Consumes:
   - `Mentor`, `ActiveBooking`, `isBookableTime`, `worksAt`, `DAILY_CAP`, `buildSlots` (Task 4);
   - `localDate` (Task 1);
@@ -599,14 +761,38 @@ git commit -m "feat(slots): turn weekly hours into utc class starts with cap and
 - Produces (`src/server/bookings.ts`):
 
 ```ts
-export type BookingInput = { startsAt: Date; parentName: string; parentEmail: string; childName: string; parentTimeZone: string };
-export type Booking = BookingInput & { id: string; mentorId: number; mentorLocalDate: string; classLink: string; cancelledAt: Date | null };
+export type BookingInput = {
+  startsAt: Date;
+  parentName: string;
+  parentEmail: string;
+  childName: string;
+  parentTimeZone: string;
+};
+export type Booking = BookingInput & {
+  id: string;
+  mentorId: number;
+  mentorLocalDate: string;
+  classLink: string;
+  cancelledAt: Date | null;
+};
 export type BookResult = { ok: true; booking: Booking } | { ok: false; code: 'SLOT_UNAVAILABLE' };
-export function newClassLink(): string;                                              // https://classroom.example/trial/<random>
-export async function loadMentors(pool: Pool): Promise<Mentor[]>;                   // with hours ('HH:MM'), ordered by id
-export async function loadActiveBookings(pool: Pool, from: Date, to: Date): Promise<ActiveBooking[]>;  // from <= starts_at < to
-export async function bookSlot(pool: Pool, input: BookingInput, now: Date, hooks?: { beforeInsert?: () => Promise<void> }): Promise<BookResult>;
-export async function getBookingWithMentor(pool: Pool, id: string): Promise<{ booking: Booking; mentor: Mentor } | null>;
+export function newClassLink(): string; // https://classroom.example/trial/<random>
+export async function loadMentors(pool: Pool): Promise<Mentor[]>; // with hours ('HH:MM'), ordered by id
+export async function loadActiveBookings(
+  pool: Pool,
+  from: Date,
+  to: Date,
+): Promise<ActiveBooking[]>; // from <= starts_at < to
+export async function bookSlot(
+  pool: Pool,
+  input: BookingInput,
+  now: Date,
+  hooks?: { beforeInsert?: () => Promise<void> },
+): Promise<BookResult>;
+export async function getBookingWithMentor(
+  pool: Pool,
+  id: string,
+): Promise<{ booking: Booking; mentor: Mentor } | null>;
 // src/server/test-db.ts (test-only)
 export async function expectBookingRulesHold(pool: Pool): Promise<void>;
 ```
@@ -631,20 +817,33 @@ test('assigns the least-booked mentor, then the lowest id', async () => {
 });
 
 test("stores the instant and the date in the mentor's own time zone", async () => {
-  await insertMentor(pool, { timeZone: 'Asia/Kolkata', hours: [{ weekday: 2, start: '02:30', end: '03:30' }] });
+  await insertMentor(pool, {
+    timeZone: 'Asia/Kolkata',
+    hours: [{ weekday: 2, start: '02:30', end: '03:30' }],
+  });
   const result = await bookSlot(pool, input('2026-10-26T21:00:00Z'), NOW); // Mon 9:00 PM in London = Tue 2:30 AM in Kolkata
   expect(result).toMatchObject({ ok: true, booking: { mentorLocalDate: '2026-10-27' } });
-  expect(result.ok && result.booking.classLink).toMatch(/^https:\/\/classroom\.example\/trial\/[\w-]{8,}$/);
+  expect(result.ok && result.booking.classLink).toMatch(
+    /^https:\/\/classroom\.example\/trial\/[\w-]{8,}$/,
+  );
   const { rows } = await pool.query('select starts_at, mentor_local_date from bookings');
-  expect([rows[0].starts_at.toISOString(), rows[0].mentor_local_date]).toEqual(['2026-10-26T21:00:00.000Z', '2026-10-27']);
+  expect([rows[0].starts_at.toISOString(), rows[0].mentor_local_date]).toEqual([
+    '2026-10-26T21:00:00.000Z',
+    '2026-10-27',
+  ]);
 });
 
 test('cancelled bookings free both the hour and the cap', async () => {
   await insertMentor(pool, { timeZone: 'Asia/Kolkata', hours: ukHours });
   const first = await bookSlot(pool, input('2026-10-27T15:00:00Z'), NOW);
   await bookSlot(pool, input('2026-10-27T16:00:00Z'), NOW);
-  expect(await bookSlot(pool, input('2026-10-27T17:00:00Z'), NOW)).toEqual({ ok: false, code: 'SLOT_UNAVAILABLE' });
-  await pool.query('update bookings set cancelled_at = now() where id = $1', [first.ok && first.booking.id]);
+  expect(await bookSlot(pool, input('2026-10-27T17:00:00Z'), NOW)).toEqual({
+    ok: false,
+    code: 'SLOT_UNAVAILABLE',
+  });
+  await pool.query('update bookings set cancelled_at = now() where id = $1', [
+    first.ok && first.booking.id,
+  ]);
   expect((await bookSlot(pool, input('2026-10-27T15:00:00Z'), NOW)).ok).toBe(true);
   expect(await loadActiveBookings(pool, NOW, new Date('2026-11-04T00:00:00Z'))).toHaveLength(2);
 });
@@ -652,14 +851,22 @@ test('cancelled bookings free both the hour and the cap', async () => {
 test('refuses times that cannot be booked', async () => {
   await insertMentor(pool, { timeZone: 'Asia/Kolkata', hours: ukHours });
   // off the hour, too soon, beyond 14 days, nobody works on Sunday
-  for (const t of ['2026-10-27T15:30:00Z', '2026-10-20T13:00:00Z', '2026-11-04T15:00:00Z', '2026-10-25T15:00:00Z'])
+  for (const t of [
+    '2026-10-27T15:30:00Z',
+    '2026-10-20T13:00:00Z',
+    '2026-11-04T15:00:00Z',
+    '2026-10-25T15:00:00Z',
+  ])
     expect(await bookSlot(pool, input(t), NOW)).toEqual({ ok: false, code: 'SLOT_UNAVAILABLE' });
 });
 
 test('same-hour race: exactly one booking per free mentor', async () => {
   const ids = [];
-  for (let i = 0; i < 3; i++) ids.push(await insertMentor(pool, { timeZone: 'Asia/Kolkata', hours: ukHours }));
-  const results = await Promise.all(Array.from({ length: 10 }, () => bookSlot(pool, input('2026-10-27T16:00:00Z'), NOW)));
+  for (let i = 0; i < 3; i++)
+    ids.push(await insertMentor(pool, { timeZone: 'Asia/Kolkata', hours: ukHours }));
+  const results = await Promise.all(
+    Array.from({ length: 10 }, () => bookSlot(pool, input('2026-10-27T16:00:00Z'), NOW)),
+  );
   const booked = results.flatMap((r) => (r.ok ? [r.booking.mentorId] : []));
   expect(booked).toHaveLength(3);
   expect(new Set(booked)).toEqual(new Set(ids));
@@ -675,26 +882,33 @@ test('cap race: the lock makes the second booking wait, then refuse', async () =
     bookSlot(pool, input('2026-10-27T17:00:00Z'), NOW, pause),
   ]);
   expect(results.filter((r) => r.ok)).toHaveLength(1);
-  const { rows } = await pool.query(`select count(*)::int as n from bookings where mentor_local_date = '2026-10-27' and cancelled_at is null`);
+  const { rows } = await pool.query(
+    `select count(*)::int as n from bookings where mentor_local_date = '2026-10-27' and cancelled_at is null`,
+  );
   expect(rows[0].n).toBe(2);
 });
 
 test('a random burst keeps every rule', async () => {
-  for (let i = 0; i < 5; i++) await insertMentor(pool, { timeZone: 'Asia/Kolkata', hours: ukHours });
-  for (let i = 0; i < 5; i++) await insertMentor(pool, { timeZone: 'Asia/Kolkata', hours: usHours });
+  for (let i = 0; i < 5; i++)
+    await insertMentor(pool, { timeZone: 'Asia/Kolkata', hours: ukHours });
+  for (let i = 0; i < 5; i++)
+    await insertMentor(pool, { timeZone: 'Asia/Kolkata', hours: usHours });
   const mentors = await loadMentors(pool);
   const open = buildSlots(mentors, [], NOW).map((s) => s.startsAt.toISOString());
   const pick = seededPick(42);
-  const results = await Promise.all(Array.from({ length: 80 }, () => bookSlot(pool, input(pick(open)), NOW)));
+  const results = await Promise.all(
+    Array.from({ length: 80 }, () => bookSlot(pool, input(pick(open)), NOW)),
+  );
   expect(results.some((r) => r.ok)).toBe(true);
   await expectBookingRulesHold(pool);
 });
 ```
 
-  Add `expectBookingRulesHold(pool: Pool): Promise<void>` to `src/server/test-db.ts`. Task 8 reuses it. It asserts three things:
-  - no active duplicate `(mentor_id, starts_at)`: `group by … having count(*) > 1` returns no rows;
-  - no `(mentor_id, mentor_local_date)` with more than 2 active bookings;
-  - every booking passes `worksAt(mentor, starts_at)`, and its `mentor_local_date` equals `localDate(starts_at, mentor.timeZone)`. Mentors come from `loadMentors`.
+Add `expectBookingRulesHold(pool: Pool): Promise<void>` to `src/server/test-db.ts`. Task 8 reuses it. It asserts three things:
+
+- no active duplicate `(mentor_id, starts_at)`: `group by … having count(*) > 1` returns no rows;
+- no `(mentor_id, mentor_local_date)` with more than 2 active bookings;
+- every booking passes `worksAt(mentor, starts_at)`, and its `mentor_local_date` equals `localDate(starts_at, mentor.timeZone)`. Mentors come from `loadMentors`.
 
 - [ ] **Step 2: Run them and see them fail**
 
@@ -744,35 +958,57 @@ git commit -m "feat(bookings): book with a per-mentor row lock and prove the rac
 ### Task 6: Emails
 
 **Files:**
+
 - Create: `src/server/email.ts`, `src/server/email.test.ts`
 - Modify: `package.json` (dependency `nodemailer`; dev dependency `@types/nodemailer`)
 
 **Interfaces:**
+
 - Consumes: `formatWhen`, `formatDate`, `formatSpan`, `formatOtherTime`, `cityName` (Task 2).
 - Produces (`src/server/email.ts`):
 
 ```ts
 export type EmailMessage = { to: string; subject: string; text: string };
 export type Mailer = { send(message: EmailMessage): Promise<void> };
-export type EmailBooking = { id: string; startsAt: Date; parentName: string; parentEmail: string; childName: string; parentTimeZone: string;
-  classLink: string; mentor: { name: string; email: string; timeZone: string } };
-export function renderEmails(b: EmailBooking, appUrl: string): { parent: EmailMessage; mentor: EmailMessage };
-export function createSmtpMailer(smtpUrl: string): Mailer;   // from 'Codeyoung Trials <trials@codeyoung.example>'
+export type EmailBooking = {
+  id: string;
+  startsAt: Date;
+  parentName: string;
+  parentEmail: string;
+  childName: string;
+  parentTimeZone: string;
+  classLink: string;
+  mentor: { name: string; email: string; timeZone: string };
+};
+export function renderEmails(
+  b: EmailBooking,
+  appUrl: string,
+): { parent: EmailMessage; mentor: EmailMessage };
+export function createSmtpMailer(smtpUrl: string): Mailer; // from 'Codeyoung Trials <trials@codeyoung.example>'
 ```
 
 - [ ] **Step 1: Write the failing tests** in `src/server/email.test.ts`
 
 ```ts
-const b: EmailBooking = { id: 'b1', startsAt: new Date('2026-10-27T16:00:00Z'), parentName: 'Asha Patel', parentEmail: 'asha@example.com',
-  childName: 'Rohan', parentTimeZone: 'Europe/London', classLink: 'https://classroom.example/trial/abc',
-  mentor: { name: 'Priya Sharma', email: 'priya.sharma@mentors.example', timeZone: 'Asia/Kolkata' } };
+const b: EmailBooking = {
+  id: 'b1',
+  startsAt: new Date('2026-10-27T16:00:00Z'),
+  parentName: 'Asha Patel',
+  parentEmail: 'asha@example.com',
+  childName: 'Rohan',
+  parentTimeZone: 'Europe/London',
+  classLink: 'https://classroom.example/trial/abc',
+  mentor: { name: 'Priya Sharma', email: 'priya.sharma@mentors.example', timeZone: 'Asia/Kolkata' },
+};
 
 test("the parent's email leads with the parent's time", () => {
   const { parent } = renderEmails(b, 'http://localhost:3000');
   expect(parent.to).toBe('asha@example.com');
   expect(parent.subject).toBe("Rohan's free trial class: Tue 27 Oct, 4:00 PM GMT (London)");
   expect(parent.text).toContain('When: Tue 27 Oct, 4:00–5:00 PM GMT (London)');
-  expect(parent.text).toContain("Mentor: Priya Sharma, joining from Kolkata, where it's 9:30 PM IST");
+  expect(parent.text).toContain(
+    "Mentor: Priya Sharma, joining from Kolkata, where it's 9:30 PM IST",
+  );
   expect(parent.text).toContain('Class link: https://classroom.example/trial/abc');
   expect(parent.text).toContain('See your booking: http://localhost:3000/bookings/b1');
 });
@@ -788,16 +1024,28 @@ test("the mentor's email leads with the mentor's own time", () => {
 });
 
 test('abbreviations follow each side across the clock changes', () => {
-  expect(renderEmails({ ...b, startsAt: new Date('2026-10-23T15:00:00Z') }, '').parent.subject)
-    .toBe("Rohan's free trial class: Fri 23 Oct, 4:00 PM BST (London)");
-  expect(renderEmails({ ...b, parentTimeZone: 'America/New_York', startsAt: new Date('2026-11-03T15:00:00Z') }, '').parent.subject)
-    .toBe("Rohan's free trial class: Tue 3 Nov, 10:00 AM EST (New York)");
-  expect(renderEmails({ ...b, startsAt: new Date('2026-10-23T15:00:00Z') }, '').mentor.text).toContain('For the family: 4:00 PM BST in London');
+  expect(
+    renderEmails({ ...b, startsAt: new Date('2026-10-23T15:00:00Z') }, '').parent.subject,
+  ).toBe("Rohan's free trial class: Fri 23 Oct, 4:00 PM BST (London)");
+  expect(
+    renderEmails(
+      { ...b, parentTimeZone: 'America/New_York', startsAt: new Date('2026-11-03T15:00:00Z') },
+      '',
+    ).parent.subject,
+  ).toBe("Rohan's free trial class: Tue 3 Nov, 10:00 AM EST (New York)");
+  expect(
+    renderEmails({ ...b, startsAt: new Date('2026-10-23T15:00:00Z') }, '').mentor.text,
+  ).toContain('For the family: 4:00 PM BST in London');
 });
 
 test("each side sees the other side's date when the days differ", () => {
-  const { parent, mentor } = renderEmails({ ...b, parentTimeZone: 'America/New_York', startsAt: new Date('2026-10-26T21:00:00Z') }, '');
-  expect(parent.text).toContain("Mentor: Priya Sharma, joining from Kolkata, where it's Tue 27 Oct, 2:30 AM IST");
+  const { parent, mentor } = renderEmails(
+    { ...b, parentTimeZone: 'America/New_York', startsAt: new Date('2026-10-26T21:00:00Z') },
+    '',
+  );
+  expect(parent.text).toContain(
+    "Mentor: Priya Sharma, joining from Kolkata, where it's Tue 27 Oct, 2:30 AM IST",
+  );
   expect(mentor.text).toContain('For the family: Mon 26 Oct, 5:00 PM EDT in New York');
 });
 ```
@@ -848,10 +1096,12 @@ git commit -m "feat(email): render parent and mentor emails in each side's own z
 ### Task 7: HTTP API, validation and the clock
 
 **Files:**
+
 - Create: `src/shared/types.ts`, `src/server/app.ts`, `src/server/api.test.ts`
 - Modify: `package.json` (dependencies `express@5`, `zod@4`; dev dependencies `@types/express`, `supertest`, `@types/supertest`)
 
 **Interfaces:**
+
 - Consumes:
   - `loadMentors`, `loadActiveBookings`, `bookSlot`, `getBookingWithMentor` (Task 5);
   - `buildSlots` (Task 4);
@@ -862,24 +1112,54 @@ git commit -m "feat(email): render parent and mentor emails in each side's own z
 
 ```ts
 export type ErrorCode = 'VALIDATION_FAILED' | 'SLOT_UNAVAILABLE' | 'NOT_FOUND' | 'INTERNAL';
-export type ApiErrorBody = { error: { code: ErrorCode; message: string; fields?: Record<string, string> } };
+export type ApiErrorBody = {
+  error: { code: ErrorCode; message: string; fields?: Record<string, string> };
+};
 export type SlotDto = { startsAt: string; available: boolean };
 export type SlotsResponse = { now: string; demo: boolean; slots: SlotDto[] };
-export type MentorDto = { id: number; name: string; bio: string; subjects: string[]; timeZone: string; bookings: { startsAt: string }[] };
+export type MentorDto = {
+  id: number;
+  name: string;
+  bio: string;
+  subjects: string[];
+  timeZone: string;
+  bookings: { startsAt: string }[];
+};
 export type MentorsResponse = { now: string; demo: boolean; mentors: MentorDto[] };
-export type BookingRequest = { startsAt: string; parentName: string; parentEmail: string; childName: string; parentTimeZone: string };
-export type BookingDto = { id: string; startsAt: string; endsAt: string; childName: string; parentName: string; parentEmail: string;
-  parentTimeZone: string; classLink: string; mentor: { name: string; bio: string; subjects: string[]; timeZone: string } };
+export type BookingRequest = {
+  startsAt: string;
+  parentName: string;
+  parentEmail: string;
+  childName: string;
+  parentTimeZone: string;
+};
+export type BookingDto = {
+  id: string;
+  startsAt: string;
+  endsAt: string;
+  childName: string;
+  parentName: string;
+  parentEmail: string;
+  parentTimeZone: string;
+  classLink: string;
+  mentor: { name: string; bio: string; subjects: string[]; timeZone: string };
+};
 export type BookingResponse = { booking: BookingDto };
 ```
 
-  - `src/server/app.ts`:
+- `src/server/app.ts`:
 
 ```ts
 export type Clock = { now: () => Date; demo: boolean };
-export function createClock(demoNow: string | undefined, realNow?: () => number): Clock;  // realNow defaults to Date.now
-export function createApp(deps: { pool: Pool; clock: Clock; mailer: Mailer; appUrl: string; webDir?: string;
-  log?: (message: string, error?: unknown) => void }): Express;                            // log defaults to console.error
+export function createClock(demoNow: string | undefined, realNow?: () => number): Clock; // realNow defaults to Date.now
+export function createApp(deps: {
+  pool: Pool;
+  clock: Clock;
+  mailer: Mailer;
+  appUrl: string;
+  webDir?: string;
+  log?: (message: string, error?: unknown) => void;
+}): Express; // log defaults to console.error
 ```
 
 - [ ] **Step 1: Write the failing tests** in `src/server/api.test.ts`
@@ -893,27 +1173,51 @@ export function createApp(deps: { pool: Pool; clock: Clock; mailer: Mailer; appU
 test('books a class, then emails both sides', async () => {
   const res = await request(app).post('/api/bookings').send(valid);
   expect(res.status).toBe(201);
-  expect(res.body.booking).toMatchObject({ startsAt: '2026-10-27T16:00:00.000Z', endsAt: '2026-10-27T17:00:00.000Z',
-    childName: 'Rohan', parentTimeZone: 'Europe/London', mentor: { timeZone: 'Asia/Kolkata' } });
+  expect(res.body.booking).toMatchObject({
+    startsAt: '2026-10-27T16:00:00.000Z',
+    endsAt: '2026-10-27T17:00:00.000Z',
+    childName: 'Rohan',
+    parentTimeZone: 'Europe/London',
+    mentor: { timeZone: 'Asia/Kolkata' },
+  });
   await vi.waitFor(() => expect(sent.map((m) => m.to)).toContain('asha@example.com'));
   expect(sent).toHaveLength(2);
 });
 
 test('accepts another offset for the same instant', async () => {
-  const res = await request(app).post('/api/bookings').send({ ...valid, startsAt: '2026-10-27T18:00:00+01:00' });
+  const res = await request(app)
+    .post('/api/bookings')
+    .send({ ...valid, startsAt: '2026-10-27T18:00:00+01:00' });
   expect([res.status, res.body.booking.startsAt]).toEqual([201, '2026-10-27T17:00:00.000Z']);
 });
 
 test('rejects bad input with field errors', async () => {
-  const res = await request(app).post('/api/bookings')
-    .send({ ...valid, parentName: '   ', childName: 'Ro\nhan', parentEmail: 'nope', parentTimeZone: 'IST', startsAt: '2026-10-27T16:30:00Z' });
+  const res = await request(app)
+    .post('/api/bookings')
+    .send({
+      ...valid,
+      parentName: '   ',
+      childName: 'Ro\nhan',
+      parentEmail: 'nope',
+      parentTimeZone: 'IST',
+      startsAt: '2026-10-27T16:30:00Z',
+    });
   expect(res.status).toBe(400);
   expect(res.body.error.code).toBe('VALIDATION_FAILED');
-  expect(Object.keys(res.body.error.fields).sort()).toEqual(['childName', 'parentEmail', 'parentName', 'parentTimeZone', 'startsAt']);
+  expect(Object.keys(res.body.error.fields).sort()).toEqual([
+    'childName',
+    'parentEmail',
+    'parentName',
+    'parentTimeZone',
+    'startsAt',
+  ]);
 });
 
 test('rejects a body that is not JSON', async () => {
-  const res = await request(app).post('/api/bookings').set('content-type', 'application/json').send('{oops');
+  const res = await request(app)
+    .post('/api/bookings')
+    .set('content-type', 'application/json')
+    .send('{oops');
   expect([res.status, res.body.error.code]).toEqual([400, 'VALIDATION_FAILED']);
 });
 
@@ -928,10 +1232,13 @@ test('409 when nobody is left for that hour, or it is too soon', async () => {
 });
 
 test('fetches a booking by id, and 404s otherwise', async () => {
-  const made = await request(app).post('/api/bookings').send({ ...valid, startsAt: '2026-10-29T15:00:00Z' });
+  const made = await request(app)
+    .post('/api/bookings')
+    .send({ ...valid, startsAt: '2026-10-29T15:00:00Z' });
   const res = await request(app).get(`/api/bookings/${made.body.booking.id}`);
   expect(res.body.booking.id).toBe(made.body.booking.id);
-  for (const id of [randomUUID(), 'abc']) expect((await request(app).get(`/api/bookings/${id}`)).body.error.code).toBe('NOT_FOUND');
+  for (const id of [randomUUID(), 'abc'])
+    expect((await request(app).get(`/api/bookings/${id}`)).body.error.code).toBe('NOT_FOUND');
 });
 
 test('lists slots from the app clock, full hours included', async () => {
@@ -952,33 +1259,65 @@ test('lists mentors with upcoming booking times only', async () => {
 test('every /api response is no-store, and unknown routes are JSON 404s', async () => {
   expect((await request(app).get('/api/slots')).headers['cache-control']).toBe('no-store');
   const res = await request(app).get('/api/nope');
-  expect([res.status, res.headers['cache-control'], res.body.error.code]).toEqual([404, 'no-store', 'NOT_FOUND']);
+  expect([res.status, res.headers['cache-control'], res.body.error.code]).toEqual([
+    404,
+    'no-store',
+    'NOT_FOUND',
+  ]);
 });
 
 test('a failing mailer never fails the booking', async () => {
   const log = vi.fn();
-  const broken = createApp({ pool, clock, appUrl: '', log, mailer: createSmtpMailer('smtp://127.0.0.1:9') }); // nothing listens on port 9
-  const res = await request(broken).post('/api/bookings').send({ ...valid, startsAt: '2026-10-30T15:00:00Z' });
+  const broken = createApp({
+    pool,
+    clock,
+    appUrl: '',
+    log,
+    mailer: createSmtpMailer('smtp://127.0.0.1:9'),
+  }); // nothing listens on port 9
+  const res = await request(broken)
+    .post('/api/bookings')
+    .send({ ...valid, startsAt: '2026-10-30T15:00:00Z' });
   expect(res.status).toBe(201);
   await vi.waitFor(() => expect(log).toHaveBeenCalled());
 });
 
 test('the app clock drives slots, booking and the mentors list', async () => {
   // a clock before any real run, so a route that reads new Date() fails here
-  const demo = createApp({ pool, clock: { now: () => new Date('2026-10-14T13:30:00Z'), demo: true }, mailer, appUrl: '' });
+  const demo = createApp({
+    pool,
+    clock: { now: () => new Date('2026-10-14T13:30:00Z'), demo: true },
+    mailer,
+    appUrl: '',
+  });
   const slots = (await request(demo).get('/api/slots')).body;
-  expect([slots.now, slots.demo, slots.slots[0].startsAt])
-    .toEqual(['2026-10-14T13:30:00.000Z', true, '2026-10-14T16:00:00.000Z']); // 15:00Z is under 2 hours away
-  expect((await request(demo).post('/api/bookings').send({ ...valid, startsAt: '2026-10-15T15:00:00Z' })).status).toBe(201);
+  expect([slots.now, slots.demo, slots.slots[0].startsAt]).toEqual([
+    '2026-10-14T13:30:00.000Z',
+    true,
+    '2026-10-14T16:00:00.000Z',
+  ]); // 15:00Z is under 2 hours away
+  expect(
+    (
+      await request(demo)
+        .post('/api/bookings')
+        .send({ ...valid, startsAt: '2026-10-15T15:00:00Z' })
+    ).status,
+  ).toBe(201);
   const mentors = (await request(demo).get('/api/mentors')).body;
   expect(mentors.demo).toBe(true);
-  expect(mentors.mentors.flatMap((m: MentorDto) => m.bookings.map((b) => b.startsAt))).toContain('2026-10-15T15:00:00.000Z');
+  expect(mentors.mentors.flatMap((m: MentorDto) => m.bookings.map((b) => b.startsAt))).toContain(
+    '2026-10-15T15:00:00.000Z',
+  );
 });
 
 test('createClock: real by default, demo clock starts at DEMO_NOW and keeps ticking', () => {
   let real = 1_000_000;
   expect(createClock(undefined, () => real)).toMatchObject({ demo: false });
-  expect(createClock('', () => real).now().getTime()).toBe(1_000_000);
+  expect(
+    createClock('', () => real)
+      .now()
+      .getTime(),
+  ).toBe(1_000_000);
   const c = createClock('2026-10-20T12:00:00Z', () => real);
   expect([c.demo, c.now().toISOString()]).toEqual([true, '2026-10-20T12:00:00.000Z']);
   real += 90_000;
@@ -1007,7 +1346,7 @@ Expected: FAIL, failing to resolve `./app.ts`.
     4. `POST /api/bookings`:
        - Call `bookSlot`.
        - Respond 201 with a `BookingDto` (load the mentor with `getBookingWithMentor`), or 409.
-       - *After* responding, `await Promise.allSettled` both `mailer.send` calls and `log` any rejection.
+       - _After_ responding, `await Promise.allSettled` both `mailer.send` calls and `log` any rejection.
     5. `GET /api/bookings/:id`: validate with `z.uuid()`, otherwise 404.
     6. `GET /api/mentors`: each mentor's active bookings with `startsAt ≥ now`, mapped to `{ startsAt }`.
     7. `app.use('/api', …)`: JSON 404 for unknown API routes.
@@ -1035,10 +1374,12 @@ git commit -m "feat(api): add slots, bookings and mentors endpoints with zod val
 ### Task 8: Seed and server entry
 
 **Files:**
+
 - Create: `src/server/seed.ts`, `src/server/seed.test.ts`, `src/server/main.ts`
 - Modify: `package.json` (scripts `"start": "node src/server/main.ts"` and `"dev:server": "node --watch src/server/main.ts"`)
 
 **Interfaces:**
+
 - Consumes:
   - `bookSlot`, `loadMentors`, `loadActiveBookings` (Task 5);
   - `buildSlots`, `worksAt` (Task 4);
@@ -1060,7 +1401,9 @@ test('seeds 10 mentors and is safe to repeat', async () => {
   expect(first.preBooked).toBeGreaterThan(0);
   const hoursBefore = (await pool.query('select count(*)::int as n from mentor_hours')).rows[0].n;
   expect(await seed(pool, NOW)).toEqual({ mentors: 10, preBooked: 0 });
-  expect((await pool.query('select count(*)::int as n from mentor_hours')).rows[0].n).toBe(hoursBefore);
+  expect((await pool.query('select count(*)::int as n from mentor_hours')).rows[0].n).toBe(
+    hoursBefore,
+  );
 });
 
 test('London, New York and Los Angeles each see a fully booked day and a full hour', async () => {
@@ -1068,15 +1411,19 @@ test('London, New York and Los Angeles each see a fully booked day and a full ho
   const slots = await slotsNow();
   for (const tz of ['Europe/London', 'America/New_York', 'America/Los_Angeles']) {
     const days = Map.groupBy(slots, (s) => localDate(s.startsAt, tz));
-    expect([...days.values()].some((d) => d.every((s) => !s.available))).toBe(true);             // a fully booked day
-    expect([...days.values()].some((d) => d.some((s) => s.available) && d.some((s) => !s.available))).toBe(true); // a full hour among open ones
+    expect([...days.values()].some((d) => d.every((s) => !s.available))).toBe(true); // a fully booked day
+    expect(
+      [...days.values()].some((d) => d.some((s) => s.available) && d.some((s) => !s.available)),
+    ).toBe(true); // a full hour among open ones
   }
 });
 
 test("London's 25 Oct still offers 1:00 AM BST and 1:00 AM GMT", async () => {
   await seed(pool, NOW);
   const open = (await slotsNow()).filter((s) => s.available).map((s) => s.startsAt.toISOString());
-  expect(open).toEqual(expect.arrayContaining(['2026-10-25T00:00:00.000Z', '2026-10-25T01:00:00.000Z']));
+  expect(open).toEqual(
+    expect.arrayContaining(['2026-10-25T00:00:00.000Z', '2026-10-25T01:00:00.000Z']),
+  );
 });
 
 test('every pre-booked class keeps the rules', async () => {
@@ -1092,26 +1439,26 @@ Expected: FAIL, failing to resolve `./seed.ts`.
 
 - [ ] **Step 3: Implement `src/server/seed.ts`.** All mentors are `Asia/Kolkata`. Use one-sentence bios with no pronouns. Emails are `firstname.lastname@mentors.example`.
 
-| # | Name | Subjects | Shift |
-|---|---|---|---|
-| 1 | Priya Sharma | Coding, Math | uk |
-| 2 | Arjun Mehta | Coding | uk |
-| 3 | Ananya Iyer | Math, Science | uk |
-| 4 | Kavya Nair | English | uk |
-| 5 | Vikram Rao | Coding, Science | uk, no Friday |
-| 6 | Sneha Kulkarni | Math | us |
-| 7 | Aditya Joshi | Coding | us |
-| 8 | Meera Pillai | Science | us |
-| 9 | Karan Malhotra | Coding, Math | us |
-| 10 | Divya Reddy | English, Math | us, no Tuesday |
+| #   | Name           | Subjects        | Shift          |
+| --- | -------------- | --------------- | -------------- |
+| 1   | Priya Sharma   | Coding, Math    | uk             |
+| 2   | Arjun Mehta    | Coding          | uk             |
+| 3   | Ananya Iyer    | Math, Science   | uk             |
+| 4   | Kavya Nair     | English         | uk             |
+| 5   | Vikram Rao     | Coding, Science | uk, no Friday  |
+| 6   | Sneha Kulkarni | Math            | us             |
+| 7   | Aditya Joshi   | Coding          | us             |
+| 8   | Meera Pillai   | Science         | us             |
+| 9   | Karan Malhotra | Coding, Math    | us             |
+| 10  | Divya Reddy    | English, Math   | us, no Tuesday |
 
-  - **Hours:**
-    - `uk`: weekdays 1–5 `20:30–23:30`, and weekdays 0 and 6 `14:30–18:30`.
-    - `us`: weekdays 0, 2, 3, 4, 5, 6 `02:30–07:30`.
-  - **Mentors**: upsert by email (`on conflict (email) do update`). Replace each mentor's hours with delete + insert inside one transaction.
-  - **Pre-booking** happens only when `select count(*) from bookings` is 0. Every booking goes through `bookSlot`, cycling four made-up parents (London, New York, Chicago, Los Angeles, at `parentN@example.com`).
-    1. Book every open slot in `[now + 2 days, now + 2 days + 50 hours)`, calling `bookSlot` repeatedly on each slot until it returns `SLOT_UNAVAILABLE`.
-    2. Then, using fresh `buildSlots` results, take the first open slot at or after `now + 5 days` whose UTC hour is 16, and book it until it's unavailable.
+- **Hours:**
+  - `uk`: weekdays 1–5 `20:30–23:30`, and weekdays 0 and 6 `14:30–18:30`.
+  - `us`: weekdays 0, 2, 3, 4, 5, 6 `02:30–07:30`.
+- **Mentors**: upsert by email (`on conflict (email) do update`). Replace each mentor's hours with delete + insert inside one transaction.
+- **Pre-booking** happens only when `select count(*) from bookings` is 0. Every booking goes through `bookSlot`, cycling four made-up parents (London, New York, Chicago, Los Angeles, at `parentN@example.com`).
+  1. Book every open slot in `[now + 2 days, now + 2 days + 50 hours)`, calling `bookSlot` repeatedly on each slot until it returns `SLOT_UNAVAILABLE`.
+  2. Then, using fresh `buildSlots` results, take the first open slot at or after `now + 5 days` whose UTC hour is 16, and book it until it's unavailable.
 
 - [ ] **Step 4: Run the tests and see them pass in all three host zones**
 
@@ -1137,6 +1484,7 @@ Expected: PASS three times.
 
 Run: `npm run dev:server`, then in another shell `curl -s localhost:3000/api/slots | head -c 200`
 Expected: JSON starting `{"now":"…","demo":false,"slots":[{"startsAt":`. Then:
+
 1. POST a booking: `curl -s -X POST localhost:3000/api/bookings -H 'content-type: application/json' -d '{"startsAt":"<an available startsAt from /api/slots>","parentName":"Asha Patel","parentEmail":"asha@example.com","childName":"Rohan","parentTimeZone":"Europe/London"}'`. Expected: 201.
 2. Run `curl -s localhost:8025/api/v1/messages | grep -o '"Subject":"[^"]*"'`. Expected: two subjects, one per side.
 
@@ -1152,9 +1500,11 @@ git commit -m "feat(seed): seed mentors and pre-book a full day and a full hour;
 ### Task 9: Booking-flow logic for the browser (pure)
 
 **Files:**
+
 - Create: `src/web/booking.ts`, `src/web/booking.test.ts`
 
 **Interfaces:**
+
 - Consumes:
   - `localDate`, `addDays`, `offsetMinutes`, `zonedTimeToInstant`, `zoneAbbreviation`, `formatZoneOption`, `canonicalTimeZone`, `isValidTimeZone` (Tasks 1–2);
   - `SlotDto` (Task 7).
@@ -1162,23 +1512,57 @@ git commit -m "feat(seed): seed mentors and pre-book a full day and a full hour;
 
 ```ts
 export const DAYS_SHOWN = 14;
-export const COMMON_ZONES = ['America/Los_Angeles', 'America/Denver', 'America/Phoenix', 'America/Chicago', 'America/New_York',
-  'America/Anchorage', 'Pacific/Honolulu', 'Europe/London', 'Europe/Dublin', 'Asia/Kolkata'];
+export const COMMON_ZONES = [
+  'America/Los_Angeles',
+  'America/Denver',
+  'America/Phoenix',
+  'America/Chicago',
+  'America/New_York',
+  'America/Anchorage',
+  'Pacific/Honolulu',
+  'Europe/London',
+  'Europe/Dublin',
+  'Asia/Kolkata',
+];
 export type Day = { key: string; slots: SlotDto[]; openCount: number };
-export function groupIntoDays(slots: SlotDto[], tz: string, now: Date): Day[];                // exactly 14 days from today in tz
-export function shownDayKey(days: Day[], selected: string | null, chosenDay: string | null, tz: string): string;
+export function groupIntoDays(slots: SlotDto[], tz: string, now: Date): Day[]; // exactly 14 days from today in tz
+export function shownDayKey(
+  days: Day[],
+  selected: string | null,
+  chosenDay: string | null,
+  tz: string,
+): string;
 export function nearestOpenTimes(slots: SlotDto[], target: string, count?: number): string[]; // default 3, returned in time order
-export function nearestOpenDays(days: Day[], key: string): { before: Day | null; after: Day | null };
-export function clockChange(days: Day[], tz: string, now: Date): { dayKey: string; from: string; to: string } | null;
+export function nearestOpenDays(
+  days: Day[],
+  key: string,
+): { before: Day | null; after: Day | null };
+export function clockChange(
+  days: Day[],
+  tz: string,
+  now: Date,
+): { dayKey: string; from: string; to: string } | null;
 export function dayMixesOffsets(day: Day, tz: string): boolean;
-export function zoneOptions(current: string, now: Date): { value: string; label: string; group: 'common' | 'all' }[];
+export function zoneOptions(
+  current: string,
+  now: Date,
+): { value: string; label: string; group: 'common' | 'all' }[];
 export function initialTimeZone(stored: string | null, device: string): string;
 export function sameZone(a: string, b: string): boolean;
 export type Details = { parentName: string; parentEmail: string; childName: string };
-export type FlowState = { step: 'details' | 'time'; details: Details; chosenDay: string | null; selected: string | null; unavailable: string | null };
+export type FlowState = {
+  step: 'details' | 'time';
+  details: Details;
+  chosenDay: string | null;
+  selected: string | null;
+  unavailable: string | null;
+};
 export type FlowAction =
-  | { type: 'detailsSubmitted'; details: Details } | { type: 'back' } | { type: 'daySelected'; dayKey: string }
-  | { type: 'slotSelected'; startsAt: string } | { type: 'slotUnavailable'; startsAt: string };
+  | { type: 'detailsSubmitted'; details: Details }
+  | { type: 'back' }
+  | { type: 'daySelected'; dayKey: string }
+  | { type: 'slotSelected'; startsAt: string }
+  | { type: 'slotUnavailable'; startsAt: string };
 export const initialFlow: FlowState;
 export function flowReducer(state: FlowState, action: FlowAction): FlowState;
 ```
@@ -1187,26 +1571,50 @@ export function flowReducer(state: FlowState, action: FlowAction): FlowState;
 
 ```ts
 test('groups into exactly 14 local days starting today, ignoring later slots', () => {
-  const days = groupIntoDays([slot('2026-10-20T15:00:00Z'), slot('2026-11-02T23:00:00Z'), slot('2026-11-03T10:00:00Z')], 'Europe/London', NOW);
-  expect(days.map((d) => d.key)).toEqual(Array.from({ length: 14 }, (_, i) => addDays('2026-10-20', i)));
+  const days = groupIntoDays(
+    [slot('2026-10-20T15:00:00Z'), slot('2026-11-02T23:00:00Z'), slot('2026-11-03T10:00:00Z')],
+    'Europe/London',
+    NOW,
+  );
+  expect(days.map((d) => d.key)).toEqual(
+    Array.from({ length: 14 }, (_, i) => addDays('2026-10-20', i)),
+  );
   expect(days.at(-1)!.slots.map((s) => s.startsAt)).toEqual(['2026-11-02T23:00:00Z']);
 });
 
 test('each repeated 1:00 AM lands on its own change day', () => {
-  const london = groupIntoDays([slot('2026-10-25T00:00:00Z'), slot('2026-10-25T01:00:00Z')], 'Europe/London', NOW);
+  const london = groupIntoDays(
+    [slot('2026-10-25T00:00:00Z'), slot('2026-10-25T01:00:00Z')],
+    'Europe/London',
+    NOW,
+  );
   expect(london.find((d) => d.key === '2026-10-25')!.slots).toHaveLength(2);
-  const ny = groupIntoDays([slot('2026-11-01T05:00:00Z'), slot('2026-11-01T06:00:00Z')], 'America/New_York', NOW);
+  const ny = groupIntoDays(
+    [slot('2026-11-01T05:00:00Z'), slot('2026-11-01T06:00:00Z')],
+    'America/New_York',
+    NOW,
+  );
   expect(ny.find((d) => d.key === '2026-11-01')!.slots).toHaveLength(2);
 });
 
 test('openCount ignores full hours', () => {
-  const [today] = groupIntoDays([slot('2026-10-20T15:00:00Z'), slot('2026-10-20T16:00:00Z', false)], 'Europe/London', NOW);
+  const [today] = groupIntoDays(
+    [slot('2026-10-20T15:00:00Z'), slot('2026-10-20T16:00:00Z', false)],
+    'Europe/London',
+    NOW,
+  );
   expect(today!.openCount).toBe(1);
 });
 
 test('shownDayKey: the selected time, then the chosen day, then the first open day', () => {
-  const days = groupIntoDays([slot('2026-10-22T15:00:00Z'), slot('2026-10-27T01:00:00Z')], 'America/Los_Angeles', NOW);
-  expect(shownDayKey(days, '2026-10-27T01:00:00Z', '2026-10-22', 'America/Los_Angeles')).toBe('2026-10-26'); // selected wins
+  const days = groupIntoDays(
+    [slot('2026-10-22T15:00:00Z'), slot('2026-10-27T01:00:00Z')],
+    'America/Los_Angeles',
+    NOW,
+  );
+  expect(shownDayKey(days, '2026-10-27T01:00:00Z', '2026-10-22', 'America/Los_Angeles')).toBe(
+    '2026-10-26',
+  ); // selected wins
   expect(shownDayKey(days, null, '2026-10-24', 'America/Los_Angeles')).toBe('2026-10-24');
   expect(shownDayKey(days, null, '2026-10-19', 'America/Los_Angeles')).toBe('2026-10-22'); // dropped at midnight
   const kolkataDays = groupIntoDays([slot('2026-10-27T01:00:00Z')], 'Asia/Kolkata', NOW);
@@ -1214,35 +1622,85 @@ test('shownDayKey: the selected time, then the chosen day, then the first open d
 });
 
 test('nearestOpenTimes ranks by distance, returns time order, skips the target and full hours', () => {
-  const slots = [slot('2026-10-27T14:00:00Z'), slot('2026-10-27T15:00:00Z'), slot('2026-10-27T16:00:00Z', false),
-    slot('2026-10-27T17:00:00Z', false), slot('2026-10-27T21:00:00Z'), slot('2026-10-27T22:00:00Z')];
-  expect(nearestOpenTimes(slots, '2026-10-27T16:00:00Z')).toEqual(['2026-10-27T14:00:00Z', '2026-10-27T15:00:00Z', '2026-10-27T21:00:00Z']);
+  const slots = [
+    slot('2026-10-27T14:00:00Z'),
+    slot('2026-10-27T15:00:00Z'),
+    slot('2026-10-27T16:00:00Z', false),
+    slot('2026-10-27T17:00:00Z', false),
+    slot('2026-10-27T21:00:00Z'),
+    slot('2026-10-27T22:00:00Z'),
+  ];
+  expect(nearestOpenTimes(slots, '2026-10-27T16:00:00Z')).toEqual([
+    '2026-10-27T14:00:00Z',
+    '2026-10-27T15:00:00Z',
+    '2026-10-27T21:00:00Z',
+  ]);
 });
 
 test('nearestOpenDays looks both ways, or finds none', () => {
-  const days = groupIntoDays([slot('2026-10-21T15:00:00Z'), slot('2026-10-24T10:00:00Z')], 'Europe/London', NOW);
+  const days = groupIntoDays(
+    [slot('2026-10-21T15:00:00Z'), slot('2026-10-24T10:00:00Z')],
+    'Europe/London',
+    NOW,
+  );
   expect(nearestOpenDays(days, '2026-10-22')).toEqual({ before: days[1], after: days[4] });
-  expect(nearestOpenDays(groupIntoDays([], 'Europe/London', NOW), '2026-10-22')).toEqual({ before: null, after: null });
+  expect(nearestOpenDays(groupIntoDays([], 'Europe/London', NOW), '2026-10-22')).toEqual({
+    before: null,
+    after: null,
+  });
 });
 
 test("clockChange finds each zone's change in the window", () => {
   const days = (tz: string) => groupIntoDays([], tz, NOW);
-  expect(clockChange(days('Europe/London'), 'Europe/London', NOW)).toEqual({ dayKey: '2026-10-25', from: 'BST', to: 'GMT' });
-  expect(clockChange(days('America/New_York'), 'America/New_York', NOW)).toEqual({ dayKey: '2026-11-01', from: 'EDT', to: 'EST' });
+  expect(clockChange(days('Europe/London'), 'Europe/London', NOW)).toEqual({
+    dayKey: '2026-10-25',
+    from: 'BST',
+    to: 'GMT',
+  });
+  expect(clockChange(days('America/New_York'), 'America/New_York', NOW)).toEqual({
+    dayKey: '2026-11-01',
+    from: 'EDT',
+    to: 'EST',
+  });
   expect(clockChange(days('Asia/Kolkata'), 'Asia/Kolkata', NOW)).toBeNull();
 });
 
 test('dayMixesOffsets is true only on the change day', () => {
-  const days = groupIntoDays([slot('2026-10-25T00:00:00Z'), slot('2026-10-25T10:00:00Z'), slot('2026-10-27T15:00:00Z'), slot('2026-10-27T16:00:00Z')], 'Europe/London', NOW);
-  expect(dayMixesOffsets(days.find((d) => d.key === '2026-10-25')!, 'Europe/London')).toBe(true);
-  expect(dayMixesOffsets(days.find((d) => d.key === '2026-10-27')!, 'Europe/London')).toBe(false);
+  const days = groupIntoDays(
+    [
+      slot('2026-10-25T00:00:00Z'),
+      slot('2026-10-25T10:00:00Z'),
+      slot('2026-10-27T15:00:00Z'),
+      slot('2026-10-27T16:00:00Z'),
+    ],
+    'Europe/London',
+    NOW,
+  );
+  expect(
+    dayMixesOffsets(
+      days.find((d) => d.key === '2026-10-25')!,
+      'Europe/London',
+    ),
+  ).toBe(true);
+  expect(
+    dayMixesOffsets(
+      days.find((d) => d.key === '2026-10-27')!,
+      'Europe/London',
+    ),
+  ).toBe(false);
 });
 
 test('zoneOptions: common zones first, exactly one entry per zone, and the current spelling kept', () => {
   const calcutta = zoneOptions('Asia/Calcutta', NOW);
   expect(calcutta.slice(0, 10).map((o) => o.group)).toEqual(Array(10).fill('common'));
-  expect(calcutta.filter((o) => sameZone(o.value, 'Asia/Kolkata')).map((o) => [o.value, o.label])).toEqual([['Asia/Calcutta', 'Kolkata (GMT+5:30)']]);
-  expect(zoneOptions('Asia/Kolkata', NOW).filter((o) => sameZone(o.value, 'Asia/Kolkata')).map((o) => o.value)).toEqual(['Asia/Kolkata']);
+  expect(
+    calcutta.filter((o) => sameZone(o.value, 'Asia/Kolkata')).map((o) => [o.value, o.label]),
+  ).toEqual([['Asia/Calcutta', 'Kolkata (GMT+5:30)']]);
+  expect(
+    zoneOptions('Asia/Kolkata', NOW)
+      .filter((o) => sameZone(o.value, 'Asia/Kolkata'))
+      .map((o) => o.value),
+  ).toEqual(['Asia/Kolkata']);
   expect(calcutta.find((o) => o.value === 'Europe/London')!.label).toBe('London (GMT+1)');
 });
 
@@ -1259,8 +1717,16 @@ test('flowReducer keeps details through a 409 and clears the selection', () => {
   expect(s.step).toBe('time');
   s = flowReducer(s, { type: 'slotSelected', startsAt: '2026-10-27T16:00:00Z' });
   s = flowReducer(s, { type: 'slotUnavailable', startsAt: '2026-10-27T16:00:00Z' });
-  expect(s).toMatchObject({ step: 'time', details, selected: null, unavailable: '2026-10-27T16:00:00Z' });
-  expect(flowReducer(s, { type: 'daySelected', dayKey: '2026-10-28' })).toMatchObject({ chosenDay: '2026-10-28', selected: null });
+  expect(s).toMatchObject({
+    step: 'time',
+    details,
+    selected: null,
+    unavailable: '2026-10-27T16:00:00Z',
+  });
+  expect(flowReducer(s, { type: 'daySelected', dayKey: '2026-10-28' })).toMatchObject({
+    chosenDay: '2026-10-28',
+    selected: null,
+  });
   expect(flowReducer(s, { type: 'back' })).toMatchObject({ step: 'details', details });
 });
 ```
@@ -1310,6 +1776,7 @@ git commit -m "feat(web): add pure day grouping, alternatives, zone options and 
 ### Task 10: Web shell, API client, hooks, confirmation page
 
 **Files:**
+
 - Create: `index.html`, `src/web/index.css`, `src/web/main.tsx`, `src/web/App.tsx`, `src/web/api.ts`, `src/web/hooks.ts`, `src/web/ui.tsx`, `src/web/ConfirmationPage.tsx`
 - Modify:
   - `vite.config.ts`: add `react()` and `tailwindcss()` plugins, `build.outDir: 'dist/web'`, and `server.proxy: { '/api': 'http://localhost:3000' }`.
@@ -1317,6 +1784,7 @@ git commit -m "feat(web): add pure day grouping, alternatives, zone options and 
   - `tsconfig.json`: `"types": ["node", "vite/client"]`. TypeScript 7 checks side-effect imports, so `import './index.css'` needs Vite's client types.
 
 **Interfaces:**
+
 - Consumes:
   - the types (Task 7);
   - `initialTimeZone` (Task 9);
@@ -1383,6 +1851,7 @@ Expected: exit 0, and `dist/web/index.html` exists.
   3. Open `http://localhost:5173/bookings/<id>`.
 
 Expected:
+
 - The confirmation matches spec §10.
 - A made-up UUID shows the not-found copy.
 - `/nope` shows the not-found card.
@@ -1399,10 +1868,12 @@ git commit -m "feat(web): add shell, palette, api client, hooks and confirmation
 ### Task 11: Booking page
 
 **Files:**
+
 - Create: `src/web/BookingPage.tsx`
 - Modify: `src/web/App.tsx` (route `/` → `BookingPage`)
 
 **Interfaces:**
+
 - Consumes:
   - `useTimeZone`, `useSlots`, `useBookSlot` (Task 10);
   - every export of `src/web/booking.ts` (Task 9);
@@ -1445,6 +1916,7 @@ Expected: exit 0.
   - **Setup:** `docker compose down -v && docker compose up -d db mailpit`, then `DEMO_NOW=2026-10-20T12:00:00Z npm run dev:server` and `npm run dev`. Use the browser with the zone set to London.
 
 Expected:
+
 1. **Step 1** blocks empty or invalid fields natively.
 2. **Step 2**:
    - shows 14 chips with counts, including at least one "Full" day from the seed;
@@ -1472,12 +1944,14 @@ git commit -m "feat(web): add the booking page with zone pill, day chips, full a
 ### Task 12: Mentors page
 
 **Files:**
+
 - Create: `src/web/MentorsPage.tsx`
 - Modify:
   - `src/web/App.tsx`: route `/mentors` → `MentorsPage`.
   - `src/web/booking.ts` and `src/web/booking.test.ts`: add `mentorDays`.
 
 **Interfaces:**
+
 - Consumes:
   - `getMentors` (Task 10);
   - the formatters (Task 2);
@@ -1488,7 +1962,14 @@ git commit -m "feat(web): add the booking page with zone pill, day chips, full a
 
 ```ts
 test("mentorDays groups by the mentor's own day and marks the cap", () => {
-  const days = mentorDays([{ startsAt: '2026-10-27T22:00:00Z' }, { startsAt: '2026-10-27T16:00:00Z' }, { startsAt: '2026-10-28T15:00:00Z' }], 'Asia/Kolkata');
+  const days = mentorDays(
+    [
+      { startsAt: '2026-10-27T22:00:00Z' },
+      { startsAt: '2026-10-27T16:00:00Z' },
+      { startsAt: '2026-10-28T15:00:00Z' },
+    ],
+    'Asia/Kolkata',
+  );
   expect(days).toEqual([
     { key: '2026-10-27', times: ['2026-10-27T16:00:00Z'], atCap: false },
     { key: '2026-10-28', times: ['2026-10-27T22:00:00Z', '2026-10-28T15:00:00Z'], atCap: true }, // 3:30 AM and 8:30 PM in Kolkata
@@ -1535,10 +2016,12 @@ git commit -m "feat(web): add the mentors showcase with booked times in each men
 ### Task 13: Docker image and the full stack
 
 **Files:**
+
 - Create: `Dockerfile`, `.dockerignore`
 - Modify: `docker-compose.yml` (add `app` and `test`)
 
 **Interfaces:**
+
 - Consumes: `npm run build`, `npm test`, `src/server/main.ts`.
 - Produces: `docker compose up` (the app on 3000, Mailpit on 8025) and `docker compose run --rm --build test`.
 
@@ -1573,26 +2056,28 @@ EXPOSE 3000
 CMD ["node", "src/server/main.ts"]
 ```
 
-  - **`app` service**:
-    - `build: { context: ., target: runtime }`, ports `"3000:3000"`.
-    - Environment: `DATABASE_URL: postgres://bookings:bookings@db:5432/bookings`, `SMTP_URL: smtp://mailpit:1025`, `APP_URL: http://localhost:3000`, `PORT: "3000"`, `TZ: UTC`, `DEMO_NOW: ${DEMO_NOW:-}`.
-    - `depends_on: { db: { condition: service_healthy }, mailpit: { condition: service_started } }`.
-    - `healthcheck: { test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/slots"], interval: 2s, retries: 30 }`. Busybox `wget` ships in `node:24-alpine`. This lets `docker compose up --wait` return only once the app is serving, so nothing needs a `sleep`.
-  - **`test` service**:
-    - `build: { context: ., target: test }`, `profiles: [test]`.
-    - Environment: the same `DATABASE_URL`, plus `TZ: UTC`.
-    - `depends_on: { db: { condition: service_healthy } }`.
+- **`app` service**:
+  - `build: { context: ., target: runtime }`, ports `"3000:3000"`.
+  - Environment: `DATABASE_URL: postgres://bookings:bookings@db:5432/bookings`, `SMTP_URL: smtp://mailpit:1025`, `APP_URL: http://localhost:3000`, `PORT: "3000"`, `TZ: UTC`, `DEMO_NOW: ${DEMO_NOW:-}`.
+  - `depends_on: { db: { condition: service_healthy }, mailpit: { condition: service_started } }`.
+  - `healthcheck: { test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/slots"], interval: 2s, retries: 30 }`. Busybox `wget` ships in `node:24-alpine`. This lets `docker compose up --wait` return only once the app is serving, so nothing needs a `sleep`.
+- **`test` service**:
+  - `build: { context: ., target: test }`, `profiles: [test]`.
+  - Environment: the same `DATABASE_URL`, plus `TZ: UTC`.
+  - `depends_on: { db: { condition: service_healthy } }`.
 
 - [ ] **Step 2: Bring the stack up from scratch**
 
 Run: `docker compose down -v && docker compose up --build -d --wait && docker compose logs app | tail -n 5`
 Expected: `listening on http://localhost:3000`.
+
 - If the log shows a TypeScript syntax error instead, Node's type stripping failed in the image. Switch to the spec's fallback: a `tsc` build stage that emits JS for `src/server` and `src/shared`, run with `node`. Don't add another runner.
 
 - [ ] **Step 3: Smoke-test the stack**
 
 Run: `curl -s localhost:3000/api/slots | head -c 120; curl -s localhost:3000/ | grep -c 'id="root"'`
 Expected: JSON starting `{"now":`, then `1`. Then:
+
 1. Book through the UI at `localhost:3000`.
 2. Check that both emails appear at `localhost:8025`.
 
@@ -1618,10 +2103,12 @@ git commit -m "feat(docker): one compose up migrates, seeds and serves; add test
 ### Task 14: README and final pass
 
 **Files:**
+
 - Create: `README.md`. Do not create or touch `TRANSCRIPT.md`; the author adds it after this plan.
 - Delete: `docs/red-run.txt`, after its content is quoted in the README.
 
 **Interfaces:**
+
 - Consumes: everything.
 
 - [ ] **Step 1: Write `README.md`** with the sections listed in spec §15, in that order. The following wording is required, **verbatim**:

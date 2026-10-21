@@ -9,8 +9,12 @@ export function App() {
   return (
     <>
       <header className="mx-auto flex max-w-3xl items-center justify-between px-4 py-5">
-        <a href="/" className="text-xl font-bold">Codeyoung</a>
-        <a href="/mentors" className="text-sm font-medium underline-offset-4 hover:underline">Our mentors</a>
+        <a href="/" className="text-xl font-bold">
+          Codeyoung
+        </a>
+        <a href="/mentors" className="text-sm font-medium underline-offset-4 hover:underline">
+          Our mentors
+        </a>
       </header>
       <main className="px-4 pb-12">
         {path === '/' ? (

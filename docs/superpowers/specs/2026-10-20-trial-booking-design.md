@@ -16,11 +16,11 @@ customer-friendly solution over unnecessary complexity".
 
 ### The numbers
 
-| | |
-|---|---|
-| Mentors | 10, all in India today |
-| Demand | about 20 parents a day |
-| Cap | at most 2 trial classes per mentor per day |
+|         |                                            |
+| ------- | ------------------------------------------ |
+| Mentors | 10, all in India today                     |
+| Demand  | about 20 parents a day                     |
+| Cap     | at most 2 trial classes per mentor per day |
 
 10 × 2 = 20 classes a day against about 20 parents a day, so capacity equals demand. "Fully booked" is
 a normal state, not a rare edge case, and the full/empty screens get real design.
@@ -36,8 +36,7 @@ On the design date, Tue 20 Oct 2026:
 A 14-day booking window opened that day spans both changes. That is why the window is 14 days and
 not Codeyoung's 7.
 
-With the real clock, both changes have left the window by 1 Nov, and the next one (US, Sun 14 Mar
-2027) only enters it around 28 Feb 2027. Reviewers will likely run the app in between, so the app has
+With the real clock, both changes have left the window by 1 Nov, and the next one (US, Sun 14 Mar 2027) only enters it around 28 Feb 2027. Reviewers will likely run the app in between, so the app has
 a demo clock (`DEMO_NOW`, section 7) that shows the DST behaviour live at any time.
 
 ## 2. Goals, non-goals, anti-goals
@@ -213,7 +212,7 @@ T2: lock 7 → (waits for T1) → free at 16:00? yes → 2 < 2? no → ROLLBACK 
 - **Every booking write goes through `bookSlot`**, including the seed. A path that skipped the lock
   would bypass the turnstile.
 - **It depends on READ COMMITTED.** Each statement takes a fresh snapshot, so T2's count after waiting
-  sees T1's committed booking. Under REPEATABLE READ, T2 would count from a snapshot taken *before* it
+  sees T1's committed booking. Under REPEATABLE READ, T2 would count from a snapshot taken _before_ it
   waited, and the cap would silently break. Don't change the isolation level; the cap race test
   catches it if anyone does.
 - **The backstop.** A partial unique index on `(mentor_id, starts_at) WHERE cancelled_at IS NULL`
@@ -333,11 +332,11 @@ and the abbreviation lookup with
 
 **The same mentor hour across the autumn changes.** A mentor teaching at 8:30 PM IST every weekday:
 
-| Mentor's 8:30 PM IST | London | New York | Phoenix |
-|---|---|---|---|
-| Fri 23 Oct | 4:00 PM BST | 11:00 AM EDT | 8:00 AM MST |
-| Tue 27 Oct | 3:00 PM **GMT** | 11:00 AM EDT | 8:00 AM MST |
-| Tue 3 Nov | 3:00 PM GMT | 10:00 AM **EST** | 8:00 AM MST |
+| Mentor's 8:30 PM IST | London          | New York         | Phoenix     |
+| -------------------- | --------------- | ---------------- | ----------- |
+| Fri 23 Oct           | 4:00 PM BST     | 11:00 AM EDT     | 8:00 AM MST |
+| Tue 27 Oct           | 3:00 PM **GMT** | 11:00 AM EDT     | 8:00 AM MST |
+| Tue 3 Nov            | 3:00 PM GMT     | 10:00 AM **EST** | 8:00 AM MST |
 
 The class never moves for the mentor. Each parent sees it shift on their own change date. For one
 week (25 Oct–1 Nov), London is 4 hours ahead of New York instead of 5. Phoenix never moves, because
@@ -346,12 +345,14 @@ Arizona doesn't observe DST.
 **The repeated hour (fall back).** On Sun 25 Oct in London, `00:00Z` is 1:00 AM BST and `01:00Z` is
 1:00 AM GMT: two different slots with the same wall-clock label. New York does the same on Sun 1 Nov
 (`05:00Z` is 1:00 AM EDT, `06:00Z` is 1:00 AM EST).
+
 - A slot's identity is its UTC instant, never its label.
 - On a day that mixes two offsets, every time on screen shows its abbreviation.
 - That local day has 25 hours, and grouping by local date handles it with no special case.
 
 **The missing hour (spring forward).** On Sun 8 Mar 2026, New York jumped from 1:59 AM EST to
 3:00 AM EDT, so 2:30 AM never happened. Only a mentor in a DST zone can hit this.
+
 - Working hours that start inside the gap move forward by the skipped hour: 2:00 becomes 3:00, and
   2:30 becomes 3:30.
 - Working hours that start in a repeated hour use its first occurrence.
@@ -363,14 +364,15 @@ Arizona doesn't observe DST.
 **The parent's day vs the mentor's day.** A Los Angeles parent's Mon 26 Oct, 6:00 PM PDT is Tue 27
 Oct, 6:30 AM IST. It shows under Monday for the parent and counts toward Tuesday for the mentor.
 
-**Ireland.** In the tz database's main format, Irish *winter* is marked as the daylight-saving period
+**Ireland.** In the tz database's main format, Irish _winter_ is marked as the daylight-saving period
 (a negative offset change). Many runtimes ship a compatibility version that flips it back. So code
-that reads a DST flag *can* get Ireland backwards, depending on which format of the data a library
+that reads a DST flag _can_ get Ireland backwards, depending on which format of the data a library
 uses. This design only ever asks "what's the offset at this instant?", so Dublin comes out right
 (UTC+0 in January, UTC+1 in July; "GMT"/"IST"). Dublin has its own test.
 
 **Renamed zones.** Node's ICU reports India as `Asia/Calcutta`; the seed stores `Asia/Kolkata`. Both
 must validate and format.
+
 - Display goes through `cityName`, so both show "Kolkata".
 - Comparisons between zones (for example "is the saved zone the device's zone?") compare canonical
   forms: `new Intl.DateTimeFormat('en', { timeZone }).resolvedOptions().timeZone`.
@@ -379,14 +381,15 @@ must validate and format.
 
 All JSON. Errors always look like `{ "error": { "code", "message", "fields"? } }`.
 
-| Method & path | Returns |
-|---|---|
-| `GET /api/slots` | `{ now, demo, slots: [{ startsAt, available }] }` for the booking window, sorted. An hour appears if at least one mentor works it. `available` is false when every such mentor is booked then or at their cap that day. |
-| `POST /api/bookings` | Body `{ startsAt, parentName, parentEmail, childName, parentTimeZone }`. `201 { booking }`, `400 VALIDATION_FAILED` with `fields`, or `409 SLOT_UNAVAILABLE`. |
-| `GET /api/bookings/:id` | `{ booking }` with the mentor's name, bio, subjects and time zone, or `404 NOT_FOUND`. The id is a random UUID, so the confirmation link can't be guessed. |
-| `GET /api/mentors` | `{ now, demo, mentors: [{ id, name, bio, subjects, timeZone, bookings: [{ startsAt }] }] }`. Upcoming active bookings: times only, no parent or child names. |
+| Method & path           | Returns                                                                                                                                                                                                                 |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/slots`        | `{ now, demo, slots: [{ startsAt, available }] }` for the booking window, sorted. An hour appears if at least one mentor works it. `available` is false when every such mentor is booked then or at their cap that day. |
+| `POST /api/bookings`    | Body `{ startsAt, parentName, parentEmail, childName, parentTimeZone }`. `201 { booking }`, `400 VALIDATION_FAILED` with `fields`, or `409 SLOT_UNAVAILABLE`.                                                           |
+| `GET /api/bookings/:id` | `{ booking }` with the mentor's name, bio, subjects and time zone, or `404 NOT_FOUND`. The id is a random UUID, so the confirmation link can't be guessed.                                                              |
+| `GET /api/mentors`      | `{ now, demo, mentors: [{ id, name, bio, subjects, timeZone, bookings: [{ startsAt }] }] }`. Upcoming active bookings: times only, no parent or child names.                                                            |
 
 Validation (Zod, at the edge):
+
 - **Names**: trimmed, 1–80 characters.
 - **Email**: a valid address, at most 254 characters.
 - **`startsAt`**: an ISO-8601 instant. It must be exactly on the UTC hour; otherwise the request fails
@@ -394,6 +397,7 @@ Validation (Zod, at the edge):
 - **`parentTimeZone`**: must pass `isValidTimeZone`.
 
 `409 SLOT_UNAVAILABLE` covers every well-formed request for a time that can't be booked right now:
+
 - every eligible mentor got taken,
 - the time is no longer at least 2 hours away,
 - or nobody works then.
@@ -428,6 +432,7 @@ on, a small banner above the card says so (section 7).
 ### Booking page (`/`): one card, steps 1–2 of a 3-step progress bar
 
 **Step 1 · Your details**
+
 - Fields: parent's name, parent's email, child's name. Visible labels above the fields, linked with
   `useId`.
 - The button reads "Choose a time".
@@ -435,6 +440,7 @@ on, a small banner above the card says so (section 7).
   needs retyping.
 
 **Step 2 · Pick a time**
+
 - A back arrow returns to step 1 with the details kept.
 - **Zone pill**, showing the city:
   - It opens a native `<select>`: common zones first (Los Angeles, Denver, Phoenix, Chicago, New York,
@@ -501,18 +507,18 @@ on, a small banner above the card says so (section 7).
 
 ```css
 @theme {
-  --font-sans: "Satoshi", ui-sans-serif, system-ui, sans-serif;
-  --color-brand: #FBB600;      /* main accent: CTAs, selected chip, progress */
-  --color-brand-50: #FFF8E6;   /* soft fill: slot-count strip, notices */
-  --color-brand-100: #FFE9AD;  /* selected chip */
-  --color-ink: #2F4F4F;        /* all text, including on yellow (5:1) */
-  --color-ink-soft: #4F6B6B;   /* secondary text (5.5:1 on page) */
-  --color-line: #E6E6E6;       /* card border */
-  --color-field: #7F9999;      /* field, chip and slot borders (3:1) */
-  --color-page: #FAFAFA;       /* page background */
-  --color-full: #F1F3F3;       /* full slot / full day */
-  --color-alert: #B42318;
-  --color-alert-50: #FEF3F2;
+  --font-sans: 'Satoshi', ui-sans-serif, system-ui, sans-serif;
+  --color-brand: #fbb600; /* main accent: CTAs, selected chip, progress */
+  --color-brand-50: #fff8e6; /* soft fill: slot-count strip, notices */
+  --color-brand-100: #ffe9ad; /* selected chip */
+  --color-ink: #2f4f4f; /* all text, including on yellow (5:1) */
+  --color-ink-soft: #4f6b6b; /* secondary text (5.5:1 on page) */
+  --color-line: #e6e6e6; /* card border */
+  --color-field: #7f9999; /* field, chip and slot borders (3:1) */
+  --color-page: #fafafa; /* page background */
+  --color-full: #f1f3f3; /* full slot / full day */
+  --color-alert: #b42318;
+  --color-alert-50: #fef3f2;
   --radius-card: 24px;
   --radius-cta: 16px;
   --radius-field: 8px;
@@ -587,6 +593,7 @@ database); no mocks for anything concurrency-related. The fixed test clock is
 `TZ=UTC`, again under `TZ=Pacific/Chatham`, and again under `TZ=America/Los_Angeles`.
 
 **`time.test.ts`**
+
 - **Offsets** across January and July: New York (−5/−4), Phoenix (−7 both), London (0/+1), Dublin
   (0/+1), Kolkata (+5:30), Kathmandu (+5:45).
 - **Gap**, New York on 8 Mar 2026: 2:00 → 3:00 EDT (`07:00Z`) and 2:30 → 3:30 EDT (`07:30Z`).
@@ -604,16 +611,18 @@ database); no mocks for anything concurrency-related. The fixed test clock is
   - Tokyo falling back to "GMT+9".
 
 **`slots.test.ts`** (pure)
+
 - Weekly hours become UTC slots.
 - The lead time and the 14-day horizon are respected.
 - A booked hour is unavailable.
-- A mentor at the cap loses only the other hours of *their own* day.
+- A mentor at the cap loses only the other hours of _their own_ day.
 - The Los Angeles parent-day vs mentor-day case.
 - A mentor placed in New York: 2:00–5:00 on the spring-forward day gives 2 classes, and 1:00–3:00 on
   the fall-back day gives 3.
 - Grouping London's 25 Oct puts both 1:00 AM slots under that day.
 
 **`bookings.test.ts`** (Postgres)
+
 - **Happy path**: a mentor is assigned, `starts_at` is stored as an instant, and `mentor_local_date`
   is in the mentor's zone. Cancelled bookings don't count toward "free" or the cap.
 - **Same-hour race**: N concurrent bookings for one hour. Successes equal the number of eligible
@@ -632,6 +641,7 @@ database); no mocks for anything concurrency-related. The fixed test clock is
   duplicate is allowed.
 
 **`api.test.ts`** (supertest)
+
 - Status codes and error shapes: 201, 400 with `fields`, 409, 404.
 - `GET /api/slots` hides hours less than 2 hours away and includes full hours as `available: false`.
 - With the mailer pointed at a dead port, a booking still returns 201 and the failure is logged.
@@ -644,6 +654,7 @@ database); no mocks for anything concurrency-related. The fixed test clock is
 with the right abbreviations across the clock changes.
 
 **`booking.test.ts`** (web, pure)
+
 - Grouping, the 14-day cut-off, nearest open times and days, offset-change detection.
 - Picking the day to show: the selected day if it's still in the list, otherwise the first day with
   times (the midnight case).
@@ -675,6 +686,7 @@ with the right abbreviations across the clock changes.
 ## 14. Configuration
 
 Environment variables, documented in the README with the compose defaults:
+
 - `DATABASE_URL`
 - `SMTP_URL` (`smtp://mailpit:1025`)
 - `APP_URL` (`http://localhost:3000`), for links in emails
@@ -706,6 +718,7 @@ Environment variables, documented in the README with the compose defaults:
 ## 16. Decision log
 
 **Decided by the user**
+
 - Docker Compose with Postgres, Mailpit, and a database healthcheck gate. One `docker compose up`
   migrates, seeds and starts. Every container uses `TZ=UTC`.
 - React + Vite served as static files; Express, TypeScript, Zod, `pg`; hand-written migrations; error
@@ -737,6 +750,7 @@ Environment variables, documented in the README with the compose defaults:
   are never cached.
 
 **Proposed and accepted in review**
+
 - Hourly UTC grid, 2-hour lead time.
 - Fewest-bookings-then-lowest-id assignment.
 - `FOR UPDATE` turnstile with one transaction per candidate, plus the partial unique index backstop.
@@ -749,12 +763,13 @@ Environment variables, documented in the README with the compose defaults:
   times; confirmation page with both times; `.example` class link.
 
 **Builder calls (not yet reviewed)**
+
 - `409 SLOT_UNAVAILABLE` is one code covering taken, too soon and not offered. The client copy is "is
   no longer available" rather than "was booked by another family", because it isn't always another
   family.
 - The abbreviation lookup: six English locales in a fixed order, then the offset form.
 - Day chips cover today plus the next 13 local days; slots beyond are ignored.
-- The empty state offers the nearest *days*. The 409 alert offers the nearest *times*.
+- The empty state offers the nearest _days_. The 409 alert offers the nearest _times_.
 - `useSlots` refetches every 60 seconds.
 - No router library: a full-page navigation to the confirmation page.
 - Plain-text emails, plus a confirmation-page link built from `APP_URL`.
