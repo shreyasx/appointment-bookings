@@ -1,0 +1,178 @@
+# Review package: 8ae1340..766f64ea67d28623dbc254ce45fa336405325e5e
+
+## Commits
+766f64e fix(api): map body read errors to 400, guard post-response email and pin two behaviours
+
+## Files changed
+ src/server/api.test.ts | 21 +++++++++++++++++++++
+ src/server/app.ts      | 20 ++++++++++++++------
+ 2 files changed, 35 insertions(+), 6 deletions(-)
+
+## Diff
+diff --git a/src/server/api.test.ts b/src/server/api.test.ts
+index a416320..74e98b8 100644
+--- a/src/server/api.test.ts
++++ b/src/server/api.test.ts
+@@ -46,20 +46,34 @@ test('rejects bad input with field errors', async () => {
+   expect(res.status).toBe(400);
+   expect(res.body.error.code).toBe('VALIDATION_FAILED');
+   expect(Object.keys(res.body.error.fields).sort()).toEqual(['childName', 'parentEmail', 'parentName', 'parentTimeZone', 'startsAt']);
+ });
+ 
+ test('rejects a body that is not JSON', async () => {
+   const res = await request(app).post('/api/bookings').set('content-type', 'application/json').send('{oops');
+   expect([res.status, res.body.error.code]).toEqual([400, 'VALIDATION_FAILED']);
+ });
+ 
++test('a body over the JSON limit is a 400, not a server error', async () => {
++  const log = vi.fn();
++  const quiet = createApp({ pool, clock, mailer, appUrl: '', log });
++  const res = await request(quiet).post('/api/bookings').send({ ...valid, parentName: 'x'.repeat(200_000) });
++  expect([res.status, res.body.error.code]).toEqual([400, 'VALIDATION_FAILED']);
++  expect(log).not.toHaveBeenCalled();
++});
++
++test('names with line or paragraph separators are rejected', async () => {
++  const res = await request(app).post('/api/bookings').send({ ...valid, parentName: 'As\u2029ha', childName: 'Ro\u2028han' });
++  expect(res.status).toBe(400);
++  expect(Object.keys(res.body.error.fields).sort()).toEqual(['childName', 'parentName']);
++});
++
+ test('409 when nobody is left for that hour, or it is too soon', async () => {
+   const at = { ...valid, startsAt: '2026-10-28T15:00:00Z' };
+   await request(app).post('/api/bookings').send(at);
+   await request(app).post('/api/bookings').send(at);
+   for (const body of [at, { ...valid, startsAt: '2026-10-20T13:00:00Z' }]) {
+     const res = await request(app).post('/api/bookings').send(body);
+     expect([res.status, res.body.error.code]).toEqual([409, 'SLOT_UNAVAILABLE']);
+   }
+ });
+ 
+@@ -84,37 +98,44 @@ test('lists mentors with upcoming booking times only', async () => {
+   expect(times.length).toBeGreaterThan(0);
+   expect(times.every((b: object) => Object.keys(b).join() === 'startsAt')).toBe(true);
+ });
+ 
+ test('every /api response is no-store, and unknown routes are JSON 404s', async () => {
+   expect((await request(app).get('/api/slots')).headers['cache-control']).toBe('no-store');
+   const res = await request(app).get('/api/nope');
+   expect([res.status, res.headers['cache-control'], res.body.error.code]).toEqual([404, 'no-store', 'NOT_FOUND']);
+ });
+ 
++test('the booking is answered before any email settles', async () => {
++  const stuck = createApp({ pool, clock, appUrl: '', mailer: { send: () => new Promise<void>(() => {}) } }); // never settles
++  const res = await request(stuck).post('/api/bookings').send({ ...valid, startsAt: '2026-11-02T15:00:00Z' });
++  expect(res.status).toBe(201);
++});
++
+ test('a failing mailer never fails the booking', async () => {
+   const log = vi.fn();
+   const broken = createApp({ pool, clock, appUrl: '', log, mailer: createSmtpMailer('smtp://127.0.0.1:9') }); // nothing listens on port 9
+   const res = await request(broken).post('/api/bookings').send({ ...valid, startsAt: '2026-10-30T15:00:00Z' });
+   expect(res.status).toBe(201);
+   await vi.waitFor(() => expect(log).toHaveBeenCalled());
+ });
+ 
+ test('the app clock drives slots, booking and the mentors list', async () => {
+   // a clock before any real run, so a route that reads new Date() fails here
+   const demo = createApp({ pool, clock: { now: () => new Date('2026-10-14T13:30:00Z'), demo: true }, mailer, appUrl: '' });
+   const slots = (await request(demo).get('/api/slots')).body;
+   expect([slots.now, slots.demo, slots.slots[0].startsAt])
+     .toEqual(['2026-10-14T13:30:00.000Z', true, '2026-10-14T16:00:00.000Z']); // 15:00Z is under 2 hours away
+   expect((await request(demo).post('/api/bookings').send({ ...valid, startsAt: '2026-10-15T15:00:00Z' })).status).toBe(201);
+   const mentors = (await request(demo).get('/api/mentors')).body;
+   expect(mentors.demo).toBe(true);
++  expect(mentors.now).toBe('2026-10-14T13:30:00.000Z');
+   expect(mentors.mentors.flatMap((m: MentorDto) => m.bookings.map((b) => b.startsAt))).toContain('2026-10-15T15:00:00.000Z');
+ });
+ 
+ test('createClock: real by default, demo clock starts at DEMO_NOW and keeps ticking', () => {
+   let real = 1_000_000;
+   expect(createClock(undefined, () => real)).toMatchObject({ demo: false });
+   expect(createClock('', () => real).now().getTime()).toBe(1_000_000);
+   const c = createClock('2026-10-20T12:00:00Z', () => real);
+   expect([c.demo, c.now().toISOString()]).toEqual([true, '2026-10-20T12:00:00.000Z']);
+   real += 90_000;
+diff --git a/src/server/app.ts b/src/server/app.ts
+index b133f76..cd48849 100644
+--- a/src/server/app.ts
++++ b/src/server/app.ts
+@@ -15,21 +15,21 @@ const END_OF_TIME = new Date('9999-12-31T00:00:00Z');
+ 
+ /** The only reader of the real time. A DEMO_NOW makes the clock start there and keep ticking. */
+ export function createClock(demoNow: string | undefined, realNow: () => number = Date.now): Clock {
+   if (!demoNow) return { now: () => new Date(realNow()), demo: false };
+   // Date.parse alone accepts 'Oct 20 2026' and reads a time with no offset in the host zone
+   if (!z.iso.datetime({ offset: true }).safeParse(demoNow).success) throw new Error('DEMO_NOW must be an ISO instant');
+   const offset = Date.parse(demoNow) - realNow();
+   return { now: () => new Date(realNow() + offset), demo: true };
+ }
+ 
+-const name = z.string().trim().min(1, 'Required').max(80).regex(/^[^\p{Cc}]*$/u, 'No line breaks or control characters');
++const name = z.string().trim().min(1, 'Required').max(80).regex(/^[^\p{Cc}\p{Zl}\p{Zp}]*$/u, 'No line breaks or control characters');
+ const bookingBody = z.object({
+   startsAt: z.iso.datetime({ offset: true }).transform((s) => new Date(s)).refine((d) => d.getTime() % HOUR_MS === 0, 'Must start on the UTC hour'),
+   parentName: name,
+   parentEmail: z.email().max(254),
+   childName: name,
+   parentTimeZone: z.string().max(64).refine(isValidTimeZone, 'Unknown time zone'),
+ });
+ 
+ const STATUS: Record<ErrorCode, number> = { VALIDATION_FAILED: 400, SLOT_UNAVAILABLE: 409, NOT_FOUND: 404, INTERNAL: 500 };
+ const fail = (res: Response, code: ErrorCode, message: string, fields?: Record<string, string>): void => {
+@@ -75,24 +75,28 @@ export function createApp(deps: {
+   });
+ 
+   app.post('/api/bookings', async (req, res) => {
+     const input = bookingBody.parse(req.body ?? {});
+     const result = await bookSlot(pool, input, clock.now());
+     if (!result.ok) return fail(res, 'SLOT_UNAVAILABLE', 'That time is no longer available. Please pick another.');
+     const found = await getBookingWithMentor(pool, result.booking.id);
+     if (!found) throw new Error(`booking ${result.booking.id} is missing right after it was made`);
+     res.status(201).json({ booking: toDto(found) });
+ 
+-    // after the response, so a mail failure never fails a booking
+-    const { parent, mentor } = renderEmails({ ...found.booking, mentor: found.mentor }, appUrl);
+-    const sends = await Promise.allSettled([parent, mentor].map(async (message) => mailer.send(message)));
+-    for (const send of sends) if (send.status === 'rejected') log('could not send a booking email', send.reason);
++    // after the response, so a mail failure never fails a booking; the catch keeps a render error away from Express's default handler
++    try {
++      const { parent, mentor } = renderEmails({ ...found.booking, mentor: found.mentor }, appUrl);
++      const sends = await Promise.allSettled([parent, mentor].map(async (message) => mailer.send(message)));
++      for (const send of sends) if (send.status === 'rejected') log('could not send a booking email', send.reason);
++    } catch (err) {
++      log('could not prepare the booking emails', err);
++    }
+   });
+ 
+   app.get('/api/bookings/:id', async (req, res) => {
+     const id = z.uuid().safeParse(req.params.id); // a malformed id would make Postgres throw
+     const found = id.success ? await getBookingWithMentor(pool, id.data) : null;
+     if (!found) return fail(res, 'NOT_FOUND', 'No such booking.');
+     res.json({ booking: toDto(found) });
+   });
+ 
+   app.get('/api/mentors', async (_req, res) => {
+@@ -120,17 +124,21 @@ export function createApp(deps: {
+     app.get('/{*splat}', (_req, res) => res.sendFile('index.html', { root: webDir }));
+   }
+ 
+   app.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
+     if (res.headersSent) return next(err);
+     if (err instanceof z.ZodError) {
+       const fields: Record<string, string> = {};
+       for (const issue of err.issues) fields[issue.path.join('.')] ??= issue.message;
+       return fail(res, 'VALIDATION_FAILED', 'Some details need fixing.', fields);
+     }
+-    if ((err as { type?: unknown }).type === 'entity.parse.failed') return fail(res, 'VALIDATION_FAILED', 'The request body is not valid JSON.');
++    // body-parser's client errors (bad JSON, too large, unknown encoding) carry a string type and a 4xx status; sendFile's ENOENT has only a status
++    const { type, status } = err as { type?: unknown; status?: unknown };
++    if (typeof type === 'string' && typeof status === 'number' && status >= 400 && status < 500) {
++      return fail(res, 'VALIDATION_FAILED', type === 'entity.parse.failed' ? 'The request body is not valid JSON.' : 'The request could not be read.');
++    }
+     log('unhandled error', err);
+     fail(res, 'INTERNAL', 'Something went wrong. Please try again.');
+   });
+ 
+   return app;
+ }

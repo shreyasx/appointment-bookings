@@ -424,7 +424,7 @@ This is the same rule as Temporal's default disambiguation (`'compatible'`).
 
 Built with Claude Code. The full sessions are in [TRANSCRIPT.md](TRANSCRIPT.md), the design is in [the spec](docs/superpowers/specs/2026-10-20-trial-booking-design.md), and the 14-task build is in [the plan](docs/superpowers/plans/2026-10-21-trial-booking.md).
 
-**Process:** brainstorm → spec → plan → two agents review the plan → a fresh subagent builds each task from the plan, with a reviewer after each → one whole-branch review and one fix round.
+**Process:** brainstorm → spec → plan → two agents review the plan → a fresh subagent builds each task from the plan, with a reviewer after each → one whole-branch review and one fix round. The ledger of rulings and every task's brief, report and review are in [`.superpowers/sdd/2026-10-21-trial-booking/`](.superpowers/sdd/2026-10-21-trial-booking/).
 
 **My calls** (the full list is in spec §16, "Decided by the user"):
 
@@ -447,7 +447,9 @@ docker-compose.yml          the stack: db, mailpit, app, and test (under a profi
 Dockerfile                  deps, build, test and runtime stages
 .dockerignore
 .prettierrc.json            Prettier: single quotes, 100 columns
-TRANSCRIPT.md               the full AI-assisted development sessions, added as exported
+TRANSCRIPT.md               what the transcript files are and how to read them
+TRANSCRIPT.jsonl            the full session log, copied as is
+transcript/subagents/       every implementer and reviewer subagent's log
 package.json                scripts; npm test runs Vitest under three host zones
 tsconfig.json               compiler rules (erasable syntax only)
 vite.config.ts              Vite build, dev proxy for /api, Vitest timeouts
@@ -457,6 +459,7 @@ migrations/
 docs/superpowers/
   specs/2026-10-20-trial-booking-design.md   the design spec
   plans/2026-10-21-trial-booking.md          the implementation plan
+.superpowers/sdd/2026-10-21-trial-booking/   the build ledger, task briefs, reports and reviews
 src/shared/
   time.ts                   every time-zone conversion and display format
   types.ts                  API request and response types for server and web

@@ -1,0 +1,450 @@
+# Review package: a469b07..f0e2b5aa45db1b8b6a8177849528e19a27d21299
+
+## Commits
+f0e2b5a fix: say no slots for an empty day, harden the image and tidy focus after errors
+
+## Files changed
+ .gitignore              |  1 +
+ Dockerfile              |  1 +
+ docker-compose.yml      |  2 +-
+ src/server/db.ts        |  2 +-
+ src/web/BookingPage.tsx | 42 ++++++++++++++++++++++++++++--------------
+ src/web/booking.test.ts |  8 +++++++-
+ src/web/booking.ts      |  6 ++++++
+ src/web/main.tsx        |  3 +++
+ 8 files changed, 48 insertions(+), 17 deletions(-)
+
+## Diff
+diff --git a/.gitignore b/.gitignore
+index 4e01bf9..0669439 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -1,6 +1,7 @@
+ node_modules/
+ dist/
+ .playwright-mcp/
+ .superpowers/
+ *.log
++*.pdf
+ .DS_Store
+diff --git a/Dockerfile b/Dockerfile
+index 3caf524..472266c 100644
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -14,11 +14,12 @@ CMD ["npm", "test"]
+ FROM node:24-alpine AS runtime
+ ENV NODE_ENV=production TZ=UTC
+ WORKDIR /app
+ COPY package.json package-lock.json ./
+ RUN npm ci --omit=dev
+ COPY migrations ./migrations
+ COPY src/shared ./src/shared
+ COPY src/server ./src/server
+ COPY --from=build /app/dist/web ./dist/web
+ EXPOSE 3000
++USER node
+ CMD ["node", "src/server/main.ts"]
+diff --git a/docker-compose.yml b/docker-compose.yml
+index d84297f..9e49ac5 100644
+--- a/docker-compose.yml
++++ b/docker-compose.yml
+@@ -37,21 +37,21 @@ services:
+       SMTP_URL: smtp://mailpit:1025
+       APP_URL: http://localhost:3000
+       PORT: "3000"
+       TZ: UTC
+       DEMO_NOW: ${DEMO_NOW:-}
+     depends_on:
+       db: { condition: service_healthy }
+       mailpit: { condition: service_started }
+     # lets `docker compose up --wait` return only once the app is serving
+     healthcheck:
+-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/slots"]
++      test: ["CMD", "wget", "-qO", "/dev/null", "http://localhost:3000/api/slots"]
+       interval: 2s
+       retries: 30
+ 
+   test:
+     build: { context: ., target: test }
+     profiles: [test]
+     environment:
+       DATABASE_URL: postgres://bookings:bookings@db:5432/bookings
+       TZ: UTC
+     depends_on:
+diff --git a/src/server/db.ts b/src/server/db.ts
+index a0a7648..729105a 100644
+--- a/src/server/db.ts
++++ b/src/server/db.ts
+@@ -30,21 +30,21 @@ export async function migrate(pool: pg.Pool): Promise<string[]> {
+     const applied: string[] = [];
+     for (const name of (await readdir(dir)).filter((f) => f.endsWith('.sql')).sort()) {
+       if (done.has(name)) continue;
+       const sql = await readFile(new URL(name, dir), 'utf8');
+       try {
+         await client.query('begin');
+         await client.query(sql);
+         await client.query('insert into schema_migrations (name) values ($1)', [name]);
+         await client.query('commit');
+       } catch (err) {
+-        await client.query('rollback');
++        await client.query('rollback').catch(() => {});
+         throw err;
+       }
+       applied.push(name);
+     }
+     return applied;
+   } finally {
+     try {
+       await client.query('select pg_advisory_unlock($1)', [MIGRATION_LOCK]);
+     } finally {
+       client.release();
+diff --git a/src/web/BookingPage.tsx b/src/web/BookingPage.tsx
+index 2d68c0f..d6a582f 100644
+--- a/src/web/BookingPage.tsx
++++ b/src/web/BookingPage.tsx
+@@ -1,48 +1,53 @@
+ import { useEffect, useId, useReducer, useRef, type FormEvent, type InputHTMLAttributes, type ReactNode, type RefObject } from 'react';
+ import { flushSync } from 'react-dom';
+ import { cityName, formatDate, formatDayKey, formatTime, isValidTimeZone, localDate, zoneAbbreviation } from '../shared/time.ts';
+ import { ApiError } from './api.ts';
+ import {
+-  clockChange, DAYS_SHOWN, dayMixesOffsets, flowReducer, groupIntoDays, initialFlow, nearestOpenDays, nearestOpenTimes, sameZone,
++  clockChange, DAYS_SHOWN, dayMixesOffsets, dayStatus, flowReducer, groupIntoDays, initialFlow, nearestOpenDays, nearestOpenTimes, sameZone,
+   shownDayKey, zoneOptions, type Day, type Details,
+ } from './booking.ts';
+ import { useBookSlot, useSlots, useTimeZone } from './hooks.ts';
+ import { Card, CardTitle, DemoBanner, primaryButton, Progress } from './ui.tsx';
+ 
+ // The day and slot radios are sr-only, so the global :focus-visible ring paints the hidden input. The visible box gets the same ring.
+ const peerRing = 'peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ink peer-focus-visible:ring-4 peer-focus-visible:ring-brand';
+ const optionButton = 'rounded-field border border-field bg-white px-3 py-2 font-medium';
+ const NOTHING_OPEN = `No times are open in the next ${DAYS_SHOWN} days. Please check back soon.`;
+ 
+ const DETAIL_FIELDS = ['parentName', 'parentEmail', 'childName'] as const;
+ const fieldErrors = (error: unknown): Record<string, string> => (error instanceof ApiError && error.status === 400 ? error.fields : {});
+ const hasDetailErrors = (error: unknown) => DETAIL_FIELDS.some((field) => fieldErrors(error)[field]);
+ 
+ export function BookingPage() {
+   const [state, dispatch] = useReducer(flowReducer, initialFlow);
+   const { timeZone, setTimeZone, deviceTimeZone } = useTimeZone();
+   const { data, error, isFetching, refetch } = useSlots();
++  const unavailableAlert = useRef<HTMLDivElement>(null);
+   const book = useBookSlot((startsAt) => {
+-    dispatch({ type: 'daySelected', dayKey: localDate(new Date(startsAt), timeZone) }); // stay on that day, even if it is now full
+-    dispatch({ type: 'slotUnavailable', startsAt });
++    flushSync(() => {
++      dispatch({ type: 'daySelected', dayKey: localDate(new Date(startsAt), timeZone) }); // stay on that day, even if it is now full
++      dispatch({ type: 'slotUnavailable', startsAt });
++    });
++    unavailableAlert.current?.focus(); // Confirm is disabled now, which drops focus to the page
+   });
+   // TanStack tells React about a pending mutation after a setTimeout(0), so a quick second click lands before the button disables
+   const sending = useRef(false);
+   const heading = useRef<HTMLHeadingElement>(null);
+   const dayRow = useRef<HTMLDivElement>(null);
+   const confirmButton = useRef<HTMLButtonElement>(null);
+   const focusedStep = useRef(state.step);
+   useEffect(() => {
+     if (focusedStep.current === state.step) return; // the first load leaves focus alone
+     focusedStep.current = state.step;
+-    heading.current?.focus();
++    // a 400 bounces back to step 1: start at the first field to fix
++    (document.querySelector<HTMLElement>('input[aria-invalid]') ?? heading.current)?.focus();
+   }, [state.step]);
+ 
+   const frame = (children: ReactNode) => (
+     <>
+       {data?.demo && <DemoBanner now={data.now} timeZone={timeZone} />}
+       <Card>
+         <Progress step={state.step === 'details' ? 1 : 2} />
+         <CardTitle />
+         {children}
+       </Card>
+@@ -165,32 +170,35 @@ export function BookingPage() {
+           dayKey={key}
+           onJump={(dayKey) => {
+             dispatch({ type: 'daySelected', dayKey });
+             dayRow.current?.querySelector<HTMLInputElement>(`input[value="${dayKey}"]`)?.focus(); // the button that had focus goes away
+           }}
+         />
+       )}
+ 
+       {state.unavailable && (
+         <UnavailableAlert
++          ref={unavailableAlert}
+           startsAt={state.unavailable}
+           alternatives={nearestOpenTimes(shownSlots, state.unavailable)}
+           timeZone={timeZone}
+           shownKey={key}
+           onPick={(startsAt) => {
+             flushSync(() => dispatch({ type: 'slotSelected', startsAt })); // Confirm is disabled until this renders, and a disabled button takes no focus
+             confirmButton.current?.focus(); // the alert holding the clicked button goes away
+           }}
+         />
+       )}
+       {bookError && !(bookError instanceof ApiError && bookError.status === 409) && !hasDetailErrors(bookError) && (
+-        <p role="alert" className="mt-4 text-sm text-alert">{bookError.message}</p>
++        <p role="alert" className="mt-4 text-sm text-alert">
++          {fieldErrors(bookError).parentTimeZone ? 'Please pick your time zone from the list.' : bookError.message}
++        </p>
+       )}
+ 
+       <button
+         ref={confirmButton}
+         type="button"
+         disabled={!selected || busy}
+         onClick={confirm}
+         className={`mt-6 ${primaryButton} disabled:cursor-not-allowed disabled:bg-full disabled:text-ink-soft`}
+       >
+         {busy ? 'Booking…' : selected ? `Confirm ${formatWhenShort(new Date(selected), timeZone)}` : 'Choose a time'}
+@@ -207,38 +215,38 @@ function formatWhenShort(at: Date, tz: string): string {
+ function DetailsForm({ details, errors, onSubmit }: { details: Details; errors: Record<string, string>; onSubmit: (details: Details) => void }) {
+   const submit = (event: FormEvent<HTMLFormElement>) => {
+     event.preventDefault();
+     const form = new FormData(event.currentTarget);
+     const value = (name: keyof Details) => String(form.get(name)).trim();
+     onSubmit({ parentName: value('parentName'), parentEmail: value('parentEmail'), childName: value('childName') });
+   };
+   return (
+     <form onSubmit={submit} className="mt-4 flex flex-col gap-4">
+       <Field name="parentName" label="Parent's name" autoComplete="name" defaultValue={details.parentName} error={errors.parentName} />
+-      <Field name="parentEmail" label="Parent's email" type="email" autoComplete="email" defaultValue={details.parentEmail} error={errors.parentEmail} />
++      <Field name="parentEmail" label="Parent's email" type="email" autoComplete="email" maxLength={254} defaultValue={details.parentEmail} error={errors.parentEmail} />
+       <Field name="childName" label="Child's name" autoComplete="off" defaultValue={details.childName} error={errors.childName} />
+       <button type="submit" className={`mt-2 ${primaryButton}`}>Choose a time</button>
+     </form>
+   );
+ }
+ 
+ function Field({ name, label, error, ...input }: { name: keyof Details; label: string; error?: string } & InputHTMLAttributes<HTMLInputElement>) {
+   const id = useId();
+   return (
+     <div>
+       <label htmlFor={id} className="mb-1 block text-sm font-medium">{label}</label>
+       <input
++        maxLength={80}
+         {...input}
+         id={id}
+         name={name}
+         required
+-        maxLength={80}
+         aria-invalid={error ? true : undefined}
+         aria-describedby={error ? `${id}-error` : undefined}
+         className="w-full rounded-field border border-field bg-white p-3 text-base aria-invalid:border-alert"
+       />
+       {error && <p id={`${id}-error`} className="mt-1 text-sm text-alert">{error}</p>}
+     </div>
+   );
+ }
+ 
+ function ZonePill({ timeZone, now, onChange }: { timeZone: string; now: Date; onChange: (tz: string) => void }) {
+@@ -265,28 +273,29 @@ function DayChips({ days, value, rowRef, onChange }: { days: Day[]; value: strin
+     <fieldset className="mt-6 min-w-0">{/* a fieldset is min-content wide by default, which would stretch the card to fit all 14 chips */}
+       <legend className="sr-only">Day</legend>
+       <div className="flex items-center gap-1">
+         <button type="button" aria-label="Earlier days" onClick={() => scroll(-1)} className={arrow}>
+           <Icon><path d="m15 18-6-6 6-6" /></Icon>
+         </button>
+         {/* the padding leaves room for the focus ring, which the scroll box would clip */}
+         <div ref={rowRef} className="flex min-w-0 flex-1 scroll-smooth gap-2 overflow-x-auto p-1 motion-reduce:scroll-auto">
+           {days.map((d) => {
+             const [weekday, ...date] = formatDayKey(d.key).split(' ');
++            const status = dayStatus(d);
+             return (
+               <label key={d.key} className="relative shrink-0">
+                 <input type="radio" name="day" value={d.key} checked={d.key === value} onChange={() => onChange(d.key)} className="peer sr-only" />
+-                <span className={`flex w-18 cursor-pointer flex-col overflow-hidden rounded-field border border-field text-center peer-checked:border-brand peer-checked:bg-brand-100 ${d.openCount ? 'bg-white' : 'bg-full text-ink-soft'} ${peerRing}`}>
++                <span className={`flex w-18 cursor-pointer flex-col overflow-hidden rounded-field border border-field text-center peer-checked:border-ink peer-checked:bg-brand-100 ${d.openCount ? 'bg-white' : 'bg-full text-ink-soft'} ${peerRing}`}>
+                   <span className="pt-2 text-xs">{weekday}</span>{' '}
+                   <span className="pb-2 font-bold">{date.join(' ')}</span>{' '}
+                   <span className={`py-1 text-xs ${d.openCount ? 'bg-brand-50' : ''}`}>
+-                    {d.openCount === 0 ? 'Full' : d.openCount === 1 ? '1 slot' : `${d.openCount} slots`}
++                    {status === 'none' ? 'No slots' : status === 'full' ? 'Full' : d.openCount === 1 ? '1 slot' : `${d.openCount} slots`}
+                   </span>
+                 </span>
+               </label>
+             );
+           })}
+         </div>
+         <button type="button" aria-label="Later days" onClick={() => scroll(1)} className={arrow}>
+           <Icon><path d="m9 18 6-6-6-6" /></Icon>
+         </button>
+       </div>
+@@ -306,63 +315,68 @@ function SlotGrid({ day, timeZone, selected, onSelect }: { day: Day; timeZone: s
+             <label key={s.startsAt} className="relative">
+               <input
+                 type="radio"
+                 name="slot"
+                 value={s.startsAt}
+                 checked={s.startsAt === selected}
+                 disabled={!s.available}
+                 onChange={() => onSelect(s.startsAt)}
+                 className="peer sr-only"
+               />
+-              <span className={`flex cursor-pointer flex-col items-center rounded-field border border-field bg-white py-3 text-sm font-medium peer-checked:border-brand peer-checked:bg-brand peer-checked:font-bold peer-disabled:cursor-not-allowed peer-disabled:border-line peer-disabled:bg-full peer-disabled:text-ink-soft ${peerRing}`}>
++              <span className={`flex cursor-pointer flex-col items-center rounded-field border border-field bg-white py-3 text-sm font-medium peer-checked:border-ink peer-checked:bg-brand peer-checked:font-bold peer-disabled:cursor-not-allowed peer-disabled:border-line peer-disabled:bg-full peer-disabled:text-ink-soft ${peerRing}`}>
+                 {formatTime(at, timeZone)}{showZone && ` ${zoneAbbreviation(at, timeZone)}`}
+                 {!s.available && <>{' '}<span className="text-xs">Full</span></>}
+               </span>
+             </label>
+           );
+         })}
+       </div>
+       {day.slots.some((s) => !s.available) && <p className="mt-3 text-sm text-ink-soft">Greyed-out times are full: every mentor is booked then.</p>}
+     </fieldset>
+   );
+ }
+ 
+ function EmptyDay({ days, dayKey, onJump }: { days: Day[]; dayKey: string; onJump: (dayKey: string) => void }) {
+   const { before, after } = nearestOpenDays(days, dayKey);
+   const nearest = [before, after].filter((d) => d !== null);
++  const full = dayStatus(days.find((d) => d.key === dayKey)!) === 'full';
+   return (
+     <div className="mt-4 rounded-field bg-full p-4 text-sm">
+-      <p className="font-bold">Every mentor is booked on {formatDayKey(dayKey)}.</p>
++      <p className="font-bold">
++        {full
++          ? `Every mentor is booked on ${formatDayKey(dayKey)}.`
++          : dayKey === days[0]!.key ? 'No times are left today.' : `There are no times on ${formatDayKey(dayKey)}.`}
++      </p>
+       {nearest.length ? (
+         <>
+           <p className="mt-1">The nearest days with open times:</p>
+           <div className="mt-3 flex flex-wrap gap-2">
+             {nearest.map((d) => (
+               <button key={d.key} type="button" onClick={() => onJump(d.key)} className={optionButton}>
+                 {formatDayKey(d.key)} · {d.openCount} {d.openCount === 1 ? 'time' : 'times'}
+               </button>
+             ))}
+           </div>
+         </>
+       ) : (
+         <p className="mt-1">{NOTHING_OPEN}</p>
+       )}
+     </div>
+   );
+ }
+ 
+-function UnavailableAlert({ startsAt, alternatives, timeZone, shownKey, onPick }: {
+-  startsAt: string; alternatives: string[]; timeZone: string; shownKey: string; onPick: (startsAt: string) => void;
++function UnavailableAlert({ ref, startsAt, alternatives, timeZone, shownKey, onPick }: {
++  ref: RefObject<HTMLDivElement | null>; startsAt: string; alternatives: string[]; timeZone: string; shownKey: string; onPick: (startsAt: string) => void;
+ }) {
+   const at = new Date(startsAt);
+   return (
+-    <div role="alert" className="mt-4 rounded-field border border-alert bg-alert-50 p-4 text-sm">
++    <div ref={ref} role="alert" tabIndex={-1} className="mt-4 rounded-field border border-alert bg-alert-50 p-4 text-sm">
+       <p className="font-bold text-alert">
+         Sorry, {formatTime(at, timeZone)} {zoneAbbreviation(at, timeZone)} on {formatDate(at, timeZone)} is no longer available.
+       </p>
+       {alternatives.length ? (
+         <>
+           <p className="mt-1">The nearest open times are below. Pick one and confirm again. Your details are kept.</p>
+           <div className="mt-3 flex flex-wrap gap-2">
+             {alternatives.map((t) => {
+               const alt = new Date(t);
+               return (
+diff --git a/src/web/booking.test.ts b/src/web/booking.test.ts
+index 5b0d5e8..f0c4711 100644
+--- a/src/web/booking.test.ts
++++ b/src/web/booking.test.ts
+@@ -1,15 +1,15 @@
+ import { expect, test } from 'vitest';
+ import { addDays } from '../shared/time.ts';
+ import type { SlotDto } from '../shared/types.ts';
+ import {
+-  clockChange, dayMixesOffsets, flowReducer, groupIntoDays, initialFlow, initialTimeZone, mentorDays, nearestOpenDays,
++  clockChange, dayMixesOffsets, dayStatus, flowReducer, groupIntoDays, initialFlow, initialTimeZone, mentorDays, nearestOpenDays,
+   nearestOpenTimes, sameZone, shownDayKey, zoneOptions,
+ } from './booking.ts';
+ 
+ const NOW = new Date('2026-10-20T12:00:00Z');
+ const slot = (startsAt: string, available = true): SlotDto => ({ startsAt, available });
+ 
+ test('groups into exactly 14 local days starting today, ignoring later slots', () => {
+   const days = groupIntoDays([slot('2026-10-20T15:00:00Z'), slot('2026-11-02T23:00:00Z'), slot('2026-11-03T10:00:00Z')], 'Europe/London', NOW);
+   expect(days.map((d) => d.key)).toEqual(Array.from({ length: 14 }, (_, i) => addDays('2026-10-20', i)));
+   expect(days.at(-1)!.slots.map((s) => s.startsAt)).toEqual(['2026-11-02T23:00:00Z']);
+@@ -20,20 +20,26 @@ test('each repeated 1:00 AM lands on its own change day', () => {
+   expect(london.find((d) => d.key === '2026-10-25')!.slots).toHaveLength(2);
+   const ny = groupIntoDays([slot('2026-11-01T05:00:00Z'), slot('2026-11-01T06:00:00Z')], 'America/New_York', NOW);
+   expect(ny.find((d) => d.key === '2026-11-01')!.slots).toHaveLength(2);
+ });
+ 
+ test('openCount ignores full hours', () => {
+   const [today] = groupIntoDays([slot('2026-10-20T15:00:00Z'), slot('2026-10-20T16:00:00Z', false)], 'Europe/London', NOW);
+   expect(today!.openCount).toBe(1);
+ });
+ 
++test('dayStatus tells an open day from a fully booked one and from one with no times at all', () => {
++  const slots = [slot('2026-10-20T15:00:00Z'), slot('2026-10-20T16:00:00Z', false), slot('2026-10-21T15:00:00Z', false)];
++  const [open, full, none] = groupIntoDays(slots, 'Europe/London', NOW); // 20, 21 and 22 Oct
++  expect([open, full, none].map((d) => dayStatus(d!))).toEqual(['open', 'full', 'none']);
++});
++
+ test('shownDayKey: the selected time, then the chosen day, then the first open day', () => {
+   const days = groupIntoDays([slot('2026-10-22T15:00:00Z'), slot('2026-10-27T01:00:00Z')], 'America/Los_Angeles', NOW);
+   expect(shownDayKey(days, '2026-10-27T01:00:00Z', '2026-10-22', 'America/Los_Angeles')).toBe('2026-10-26'); // selected wins
+   expect(shownDayKey(days, null, '2026-10-24', 'America/Los_Angeles')).toBe('2026-10-24');
+   expect(shownDayKey(days, null, '2026-10-19', 'America/Los_Angeles')).toBe('2026-10-22'); // dropped at midnight
+   const kolkataDays = groupIntoDays([slot('2026-10-27T01:00:00Z')], 'Asia/Kolkata', NOW);
+   expect(shownDayKey(kolkataDays, '2026-10-27T01:00:00Z', null, 'Asia/Kolkata')).toBe('2026-10-27'); // zone changed
+ });
+ 
+ test('nearestOpenTimes ranks by distance, returns time order, skips the target and full hours', () => {
+diff --git a/src/web/booking.ts b/src/web/booking.ts
+index 6992e4f..0191aef 100644
+--- a/src/web/booking.ts
++++ b/src/web/booking.ts
+@@ -19,20 +19,26 @@ export function groupIntoDays(slots: SlotDto[], tz: string, now: Date): Day[] {
+   const byKey = new Map(days.map((d) => [d.key, d]));
+   for (const s of slots) {
+     const day = byKey.get(localDate(new Date(s.startsAt), tz));
+     if (!day) continue;
+     day.slots.push(s);
+     if (s.available) day.openCount++;
+   }
+   return days;
+ }
+ 
++/** 'full' when every time that day is taken, 'none' when it has no times at all (today after the 2-hour lead, or a day nobody works). */
++export function dayStatus(day: Day): 'open' | 'full' | 'none' {
++  if (day.slots.length === 0) return 'none';
++  return day.openCount === 0 ? 'full' : 'open';
++}
++
+ /** The day to show: the selected time's own day (it must stay on screen after a zone change), else the chosen day, else the first open one. */
+ export function shownDayKey(days: Day[], selected: string | null, chosenDay: string | null, tz: string): string {
+   const has = (key: string) => days.some((d) => d.key === key);
+   const selectedDay = selected && localDate(new Date(selected), tz);
+   if (selectedDay && has(selectedDay)) return selectedDay;
+   if (chosenDay && has(chosenDay)) return chosenDay;
+   return (days.find((d) => d.openCount > 0) ?? days[0])!.key;
+ }
+ 
+ /** The open times closest to `target` (never `target` itself), in time order. */
+diff --git a/src/web/main.tsx b/src/web/main.tsx
+index 8602e55..3f32dd4 100644
+--- a/src/web/main.tsx
++++ b/src/web/main.tsx
+@@ -5,17 +5,20 @@ import { App } from './App.tsx';
+ import { ApiError } from './api.ts';
+ import './index.css';
+ 
+ // a 4xx is the server's answer, so asking again would only repeat it
+ const queryClient = new QueryClient({
+   defaultOptions: {
+     queries: { retry: (failures, error) => failures < 3 && !(error instanceof ApiError && error.status < 500) },
+   },
+ });
+ 
++// Safari restores the booking page from the back-forward cache after Back from the confirmation, with Confirm stuck on "Booking…"
++addEventListener('pageshow', (e) => { if (e.persisted) location.reload(); });
++
+ createRoot(document.getElementById('root')!).render(
+   <StrictMode>
+     <QueryClientProvider client={queryClient}>
+       <App />
+     </QueryClientProvider>
+   </StrictMode>,
+ );

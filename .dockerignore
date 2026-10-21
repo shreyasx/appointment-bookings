@@ -6,3 +6,5 @@ dist
 docs
 *.pdf
 TRANSCRIPT.md
+TRANSCRIPT.jsonl
+transcript

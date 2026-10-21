@@ -1,0 +1,213 @@
+# Review package: fd51699..f09bb07a5b383d0cf48ca30cb96342deb811714b
+
+## Commits
+f09bb07 feat(time): format times with locally used zone names and city
+
+## Files changed
+ src/shared/time.test.ts | 49 ++++++++++++++++++++++++++-
+ src/shared/time.ts      | 90 ++++++++++++++++++++++++++++++++++++++++++++++++-
+ 2 files changed, 137 insertions(+), 2 deletions(-)
+
+## Diff
+diff --git a/src/shared/time.test.ts b/src/shared/time.test.ts
+index b256696..f4356e9 100644
+--- a/src/shared/time.test.ts
++++ b/src/shared/time.test.ts
+@@ -1,12 +1,16 @@
+ import { expect, test } from 'vitest';
+-import { addDays, isValidTimeZone, localDate, offsetMinutes, weekdayOf, zonedTimeToInstant } from './time.ts';
++import {
++  addDays, canonicalTimeZone, cityName, formatDateWithYear, formatDayKey, formatOffset, formatOtherTime,
++  formatSpan, formatTime, formatWhen, formatZoneOption, isValidTimeZone, localDate, offsetMinutes, weekdayOf,
++  zoneAbbreviation, zonedTimeToInstant,
++} from './time.ts';
+ 
+ test.each([
+   ['America/New_York', '2026-01-15T12:00:00Z', -300], ['America/New_York', '2026-07-15T12:00:00Z', -240],
+   ['America/Phoenix', '2026-01-15T12:00:00Z', -420], ['America/Phoenix', '2026-07-15T12:00:00Z', -420],
+   ['Europe/London', '2026-01-15T12:00:00Z', 0], ['Europe/London', '2026-07-15T12:00:00Z', 60],
+   ['Europe/Dublin', '2026-01-15T12:00:00Z', 0], ['Europe/Dublin', '2026-07-15T12:00:00Z', 60],
+   ['Asia/Kolkata', '2026-01-15T12:00:00Z', 330], ['Asia/Kathmandu', '2026-07-15T12:00:00Z', 345],
+ ])('offsetMinutes(%s, %s) is %i', (tz, at, minutes) => {
+   expect(offsetMinutes(new Date(at), tz)).toBe(minutes);
+ });
+@@ -32,10 +36,53 @@ test('calendar helpers', () => {
+   expect([weekdayOf('2026-10-25'), weekdayOf('2026-10-27')]).toEqual([0, 2]);
+   expect([addDays('2026-10-31', 1), addDays('2026-11-01', -1)]).toEqual(['2026-11-01', '2026-10-31']);
+ });
+ 
+ test.each(['Asia/Kolkata', 'Asia/Calcutta', 'Europe/Dublin', 'UTC', 'US/Eastern'])('accepts %s', (tz) => {
+   expect(isValidTimeZone(tz)).toBe(true);
+ });
+ test.each(['IST', 'EST', 'GMT', 'Mars/Olympus', '', 'GMT+5:30x'])('rejects %j', (tz) => {
+   expect(isValidTimeZone(tz)).toBe(false);
+ });
++
++test.each([
++  ['2026-10-27T16:00:00Z', 'Europe/London', 'Tue 27 Oct, 4:00 PM GMT (London)'],
++  ['2026-10-23T15:00:00Z', 'Europe/London', 'Fri 23 Oct, 4:00 PM BST (London)'],
++  ['2026-10-27T16:00:00Z', 'Asia/Kolkata', 'Tue 27 Oct, 9:30 PM IST (Kolkata)'],
++  ['2026-10-27T16:00:00Z', 'Asia/Calcutta', 'Tue 27 Oct, 9:30 PM IST (Kolkata)'],
++  ['2026-11-03T15:00:00Z', 'America/New_York', 'Tue 3 Nov, 10:00 AM EST (New York)'],
++])('formatWhen(%s, %s)', (at, tz, expected) => expect(formatWhen(new Date(at), tz)).toBe(expected));
++
++test.each([
++  ['2026-07-15T12:00:00Z', 'Europe/Dublin', 'IST'], ['2026-01-15T12:00:00Z', 'Europe/Dublin', 'GMT'],
++  ['2026-01-15T12:00:00Z', 'America/Phoenix', 'MST'], ['2026-07-15T12:00:00Z', 'America/Phoenix', 'MST'],
++  ['2026-07-15T12:00:00Z', 'America/New_York', 'EDT'], ['2026-07-15T12:00:00Z', 'Asia/Tokyo', 'GMT+9'],
++])('zoneAbbreviation(%s, %s) is %s', (at, tz, expected) => expect(zoneAbbreviation(new Date(at), tz)).toBe(expected));
++
++test.each([
++  ['2026-10-27T16:00:00Z', '2026-10-27T17:00:00Z', 'Europe/London', '4:00–5:00 PM GMT (London)'],
++  ['2026-10-27T11:00:00Z', '2026-10-27T12:00:00Z', 'Europe/London', '11:00 AM–12:00 PM GMT (London)'],
++  ['2026-10-25T00:00:00Z', '2026-10-25T01:00:00Z', 'Europe/London', '1:00 AM BST–1:00 AM GMT (London)'],
++  ['2026-10-27T16:00:00Z', '2026-10-27T17:00:00Z', 'Asia/Kolkata', '9:30–10:30 PM IST (Kolkata)'],
++])('formatSpan(%s, %s, %s)', (start, end, tz, expected) => {
++  expect(formatSpan(new Date(start), new Date(end), tz)).toBe(expected);
++});
++
++test('dates, cities, offsets and picker labels', () => {
++  expect(formatDateWithYear(new Date('2026-10-27T16:00:00Z'), 'Europe/London')).toBe('Tue 27 Oct 2026');
++  expect(formatDayKey('2026-10-25')).toBe('Sun 25 Oct');
++  expect(['America/New_York', 'America/Indiana/Indianapolis', 'Asia/Calcutta', 'Europe/Kiev', 'UTC'].map(cityName))
++    .toEqual(['New York', 'Indianapolis', 'Kolkata', 'Kyiv', 'UTC']);
++  expect([0, 60, 330, -240, 345].map(formatOffset)).toEqual(['GMT', 'GMT+1', 'GMT+5:30', 'GMT-4', 'GMT+5:45']);
++  expect(formatZoneOption(new Date('2026-07-15T12:00:00Z'), 'Europe/London')).toBe('London (GMT+1)');
++  expect(formatZoneOption(new Date('2026-01-15T12:00:00Z'), 'Europe/London')).toBe('London (GMT)');
++  expect(formatZoneOption(new Date('2026-07-15T12:00:00Z'), 'Asia/Kolkata')).toBe('Kolkata (GMT+5:30)');
++  expect(canonicalTimeZone('Asia/Kolkata')).toBe(canonicalTimeZone('Asia/Calcutta'));
++  expect(formatTime(new Date('2026-10-27T16:00:00Z'), 'Europe/London')).not.toMatch(/\u202f/);
++});
++
++test("the other side's time carries its date when the two sides are on different days", () => {
++  const usEvening = new Date('2026-10-26T21:00:00Z'); // Mon 5:00 PM in New York = Tue 2:30 AM in Kolkata
++  expect(formatOtherTime(new Date('2026-10-27T16:00:00Z'), 'Asia/Kolkata', 'Europe/London')).toBe('9:30 PM IST');
++  expect(formatOtherTime(usEvening, 'Asia/Kolkata', 'America/New_York')).toBe('Tue 27 Oct, 2:30 AM IST');
++  expect(formatOtherTime(usEvening, 'America/New_York', 'Asia/Kolkata')).toBe('Mon 26 Oct, 5:00 PM EDT');
++});
+diff --git a/src/shared/time.ts b/src/shared/time.ts
+index be51d0e..631e3ac 100644
+--- a/src/shared/time.ts
++++ b/src/shared/time.ts
+@@ -1,21 +1,21 @@
+ // ponytail: Intl only; swap for Temporal.ZonedDateTime once Node and Safari ship it
+ 
+ const formatters = new Map<string, Intl.DateTimeFormat>();
+ 
+ // Slot building calls these hundreds of times per request, so formatters are built once per locale, zone and options.
+ function formatter(locale: string, timeZone: string, options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+   const key = `${locale}|${timeZone}|${JSON.stringify(options)}`;
+   let f = formatters.get(key);
+   if (!f) {
++    f = new Intl.DateTimeFormat(locale, { ...options, timeZone }); // throws on a junk zone, before the cache is touched
+     if (formatters.size > 500) formatters.clear(); // ponytail: clear-all past 500 entries; an LRU if real zones ever churn
+-    f = new Intl.DateTimeFormat(locale, { ...options, timeZone });
+     formatters.set(key, f);
+   }
+   return f;
+ }
+ 
+ // ICU accepts "IST" and maps it to India, so a zone without a "/" is only valid as "UTC" (spec §7 rule 8).
+ export function isValidTimeZone(tz: string): boolean {
+   if (tz !== 'UTC' && !tz.includes('/')) return false;
+   try {
+     formatter('en-US', tz, {});
+@@ -69,10 +69,98 @@ export function zonedTimeToInstant(date: string, time: string, tz: string): Date
+   const [hh, mm, ss = 0] = time.split(':').map(Number);
+   const wall = Date.UTC(y, m - 1, d, hh!, mm!, ss); // the wall-clock reading as if it were UTC
+   const early = offsetMinutes(new Date(wall - 86_400_000), tz);
+   const late = offsetMinutes(new Date(wall + 86_400_000), tz);
+   const valid = [early, late]
+     .map((o) => wall - o * 60_000)
+     .filter((t) => offsetMinutes(new Date(t), tz) * 60_000 === wall - t);
+   // repeated hour: two valid instants, take the earlier; gap: none valid, move forward by the gap
+   return new Date(valid.length ? Math.min(...valid) : wall - early * 60_000);
+ }
++
++/** 'GMT', 'GMT+1', 'GMT+5:30', 'GMT-4' for an offset in minutes. */
++export function formatOffset(minutes: number): string {
++  if (minutes === 0) return 'GMT';
++  const abs = Math.abs(minutes);
++  const rest = abs % 60 ? `:${String(abs % 60).padStart(2, '0')}` : '';
++  return `GMT${minutes < 0 ? '-' : '+'}${Math.floor(abs / 60)}${rest}`;
++}
++
++/** The name people there use for the zone at `at` ('BST', 'IST', 'EDT'), or 'GMT+9' when no English locale names it. */
++export function zoneAbbreviation(at: Date, tz: string): string {
++  // ponytail: six English locales cover the zones we serve; add a per-zone map if one picks a wrong name
++  for (const locale of ['en-US', 'en-GB', 'en-IE', 'en-IN', 'en-CA', 'en-AU']) {
++    const name = formatter(locale, tz, { timeZoneName: 'short' })
++      .formatToParts(at)
++      .find((p) => p.type === 'timeZoneName')?.value;
++    if (name && !/^(GMT|UTC)[+-]/.test(name)) return name;
++  }
++  return formatOffset(offsetMinutes(at, tz));
++}
++
++const CITY_ALIASES: Record<string, string> = {
++  'Asia/Calcutta': 'Kolkata',
++  'Europe/Kiev': 'Kyiv',
++  'Asia/Saigon': 'Ho Chi Minh City',
++};
++
++export function cityName(tz: string): string {
++  return CITY_ALIASES[tz] ?? tz.slice(tz.lastIndexOf('/') + 1).replaceAll('_', ' ');
++}
++
++/** ICU's own spelling of a zone, so 'Asia/Kolkata' and 'Asia/Calcutta' compare equal. */
++export function canonicalTimeZone(tz: string): string {
++  return formatter('en', tz, {}).resolvedOptions().timeZone;
++}
++
++/** '4:00 PM', with a plain space where ICU puts a narrow no-break one. */
++export function formatTime(at: Date, tz: string): string {
++  return formatter('en-US', tz, { hour: 'numeric', minute: '2-digit' }).format(at).replace(/\u202f/g, ' ');
++}
++
++/** 'Tue 27 Oct' */
++export function formatDate(at: Date, tz: string): string {
++  return formatter('en-GB', tz, { weekday: 'short', day: 'numeric', month: 'short' }).format(at);
++}
++
++/** 'Tue 27 Oct 2026' (en-GB would put a comma after the weekday if asked for the year too) */
++export function formatDateWithYear(at: Date, tz: string): string {
++  return `${formatDate(at, tz)} ${formatter('en-GB', tz, { year: 'numeric' }).format(at)}`;
++}
++
++/** A 'YYYY-MM-DD' calendar day as 'Sun 25 Oct'. */
++export function formatDayKey(key: string): string {
++  return formatDate(new Date(`${key}T12:00:00Z`), 'UTC');
++}
++
++/** 'BST (London)' */
++export function formatZone(at: Date, tz: string): string {
++  return `${zoneAbbreviation(at, tz)} (${cityName(tz)})`;
++}
++
++/** 'Tue 27 Oct, 4:00 PM BST (London)', the display style used in the UI and the emails. */
++export function formatWhen(at: Date, tz: string): string {
++  return `${formatDate(at, tz)}, ${formatTime(at, tz)} ${formatZone(at, tz)}`;
++}
++
++/** '4:00–5:00 PM GMT (London)'; names both zones when a clock change falls inside the span. */
++export function formatSpan(start: Date, end: Date, tz: string): string {
++  const from = formatTime(start, tz);
++  const to = formatTime(end, tz);
++  const city = cityName(tz);
++  if (offsetMinutes(start, tz) !== offsetMinutes(end, tz)) {
++    return `${from} ${zoneAbbreviation(start, tz)}–${to} ${zoneAbbreviation(end, tz)} (${city})`;
++  }
++  const samePeriod = from.slice(-2) === to.slice(-2); // 'AM' or 'PM'
++  return `${samePeriod ? from.slice(0, -3) : from}–${to} ${zoneAbbreviation(start, tz)} (${city})`;
++}
++
++/** 'London (GMT+1)', the label in the zone picker. */
++export function formatZoneOption(at: Date, tz: string): string {
++  return `${cityName(tz)} (${formatOffset(offsetMinutes(at, tz))})`;
++}
++
++/** The time in `tz` for a reader in `viewerTz`: '9:30 PM IST', with the date when the two sides are on different days. */
++export function formatOtherTime(at: Date, tz: string, viewerTz: string): string {
++  const time = `${formatTime(at, tz)} ${zoneAbbreviation(at, tz)}`;
++  return localDate(at, tz) === localDate(at, viewerTz) ? time : `${formatDate(at, tz)}, ${time}`;
++}

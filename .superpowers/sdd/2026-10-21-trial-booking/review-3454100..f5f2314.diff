@@ -1,0 +1,124 @@
+# Review package: 3454100..f5f231457b6437186be04ba8ac1a1ef1cf0f16c0
+
+## Commits
+f5f2314 feat(docker): one compose up migrates, seeds and serves; add test service
+
+## Files changed
+ .dockerignore      |  7 +++++++
+ Dockerfile         | 24 ++++++++++++++++++++++++
+ docker-compose.yml | 38 +++++++++++++++++++++++++++++++++++---
+ 3 files changed, 66 insertions(+), 3 deletions(-)
+
+## Diff
+diff --git a/.dockerignore b/.dockerignore
+new file mode 100644
+index 0000000..e046413
+--- /dev/null
++++ b/.dockerignore
+@@ -0,0 +1,7 @@
++node_modules
++dist
++.git
++.playwright-mcp
++.superpowers
++docs
++*.pdf
+diff --git a/Dockerfile b/Dockerfile
+new file mode 100644
+index 0000000..3caf524
+--- /dev/null
++++ b/Dockerfile
+@@ -0,0 +1,24 @@
++FROM node:24-alpine AS deps
++WORKDIR /app
++COPY package.json package-lock.json ./
++RUN npm ci
++
++FROM deps AS build
++COPY . .
++RUN npm run build
++
++FROM deps AS test
++COPY . .
++CMD ["npm", "test"]
++
++FROM node:24-alpine AS runtime
++ENV NODE_ENV=production TZ=UTC
++WORKDIR /app
++COPY package.json package-lock.json ./
++RUN npm ci --omit=dev
++COPY migrations ./migrations
++COPY src/shared ./src/shared
++COPY src/server ./src/server
++COPY --from=build /app/dist/web ./dist/web
++EXPOSE 3000
++CMD ["node", "src/server/main.ts"]
+diff --git a/docker-compose.yml b/docker-compose.yml
+index 51a8d05..d84297f 100644
+--- a/docker-compose.yml
++++ b/docker-compose.yml
+@@ -1,29 +1,61 @@
+ services:
+   db:
+     image: postgres:17-alpine
+     environment:
+       POSTGRES_USER: bookings
+       POSTGRES_PASSWORD: bookings
+       POSTGRES_DB: bookings
+       TZ: UTC
++    # every published port binds to localhost: the db has well-known credentials, so nothing is reachable from the LAN
+     ports:
+-      - "5433:5432"
++      - "127.0.0.1:5433:5432"
+     # test files run in parallel and each race test opens up to 40 connections
+     command: ["postgres", "-c", "max_connections=200"]
+     healthcheck:
+       test: ["CMD-SHELL", "pg_isready -U bookings -d bookings"]
+       interval: 2s
+       retries: 30
+     volumes:
+       - db-data:/var/lib/postgresql/data
+ 
+   mailpit:
+     image: axllent/mailpit:v1.31.6
+     environment:
+       TZ: UTC
+     ports:
+-      - "8025:8025"
+-      - "1025:1025"
++      - "127.0.0.1:8025:8025"
++      - "127.0.0.1:1025:1025"
++
++  app:
++    build: { context: ., target: runtime }
++    # node as PID 1 ignores SIGTERM, so without an init `docker compose down` waits out the 10 s kill timeout
++    init: true
++    ports:
++      - "127.0.0.1:3000:3000"
++    environment:
++      DATABASE_URL: postgres://bookings:bookings@db:5432/bookings
++      SMTP_URL: smtp://mailpit:1025
++      APP_URL: http://localhost:3000
++      PORT: "3000"
++      TZ: UTC
++      DEMO_NOW: ${DEMO_NOW:-}
++    depends_on:
++      db: { condition: service_healthy }
++      mailpit: { condition: service_started }
++    # lets `docker compose up --wait` return only once the app is serving
++    healthcheck:
++      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/slots"]
++      interval: 2s
++      retries: 30
++
++  test:
++    build: { context: ., target: test }
++    profiles: [test]
++    environment:
++      DATABASE_URL: postgres://bookings:bookings@db:5432/bookings
++      TZ: UTC
++    depends_on:
++      db: { condition: service_healthy }
+ 
+ volumes:
+   db-data:

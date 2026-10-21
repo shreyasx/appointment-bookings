@@ -1,0 +1,145 @@
+# Review package: 4ced656..fd5169908ad9fa5a6dd8581aa3d75c2d1b1e93f2
+
+## Commits
+fd51699 fix(time): bound the formatter cache and pin node types to the engines floor
+
+## Files changed
+ package-lock.json  | 17 ++++++++---------
+ package.json       |  2 +-
+ src/shared/time.ts |  1 +
+ 3 files changed, 10 insertions(+), 10 deletions(-)
+
+## Diff
+diff --git a/package-lock.json b/package-lock.json
+index 836a155..2c51e02 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -1,22 +1,21 @@
+ {
+   "name": "appointment-bookings",
+   "version": "1.0.0",
+   "lockfileVersion": 3,
+   "requires": true,
+   "packages": {
+     "": {
+       "name": "appointment-bookings",
+       "version": "1.0.0",
+-      "license": "ISC",
+       "devDependencies": {
+-        "@types/node": "^26.6.5",
++        "@types/node": "^22.20.5",
+         "typescript": "^7.0.2",
+         "vitest": "^5.0.5"
+       },
+       "engines": {
+         "node": ">=22.18"
+       }
+     },
+     "node_modules/@jridgewell/resolve-uri": {
+       "version": "3.1.2",
+       "resolved": "https://registry.npmjs.org/@jridgewell/resolve-uri/-/resolve-uri-3.1.2.tgz",
+@@ -353,27 +352,27 @@
+       "license": "MIT"
+     },
+     "node_modules/@types/estree": {
+       "version": "1.0.9",
+       "resolved": "https://registry.npmjs.org/@types/estree/-/estree-1.0.9.tgz",
+       "integrity": "sha512-GhdPgy1el4/ImP05X05Uw4cw2/M93BCUmnEvWZNStlCzEKME4Fkk+YpoA5OiHNQmoS7Cafb8Xa3Pya8m1Qrzeg==",
+       "dev": true,
+       "license": "MIT"
+     },
+     "node_modules/@types/node": {
+-      "version": "26.6.5",
+-      "resolved": "https://registry.npmjs.org/@types/node/-/node-26.6.5.tgz",
+-      "integrity": "sha512-uMzsv9stDdofIZBx4UGh4Z9ZgXnGC9seRDscilBcTHAeOFk67MZg/k9bWVfO+bk4qZmG+l52hRnLwUiH2LnJTg==",
++      "version": "22.20.5",
++      "resolved": "https://registry.npmjs.org/@types/node/-/node-22.20.5.tgz",
++      "integrity": "sha512-U2+DNr+wSjpsTS/wZGYHq7GcwfuSmKiKvoPvK22zwTlRhU91yOniN4qRR5KhIjvif7ysw/dz/hKmfDH0Ris4aA==",
+       "dev": true,
+       "license": "MIT",
+       "dependencies": {
+-        "undici-types": "~8.9.0"
++        "undici-types": "~6.21.0"
+       }
+     },
+     "node_modules/@typescript/typescript-aix-ppc64": {
+       "version": "7.0.2",
+       "resolved": "https://registry.npmjs.org/@typescript/typescript-aix-ppc64/-/typescript-aix-ppc64-7.0.2.tgz",
+       "integrity": "sha512-MTKKkWB7p/0E9xi1d1tHtZ5PiLkGEMIq88pK2CubZjOsLtYTLqhgIgi6zepFa+9GHZ6h05NMCkQxGKiPXMxXtQ==",
+       "cpu": [
+         "ppc64"
+       ],
+       "dev": true,
+@@ -1326,23 +1325,23 @@
+         "@typescript/typescript-netbsd-arm64": "7.0.2",
+         "@typescript/typescript-netbsd-x64": "7.0.2",
+         "@typescript/typescript-openbsd-arm64": "7.0.2",
+         "@typescript/typescript-openbsd-x64": "7.0.2",
+         "@typescript/typescript-sunos-x64": "7.0.2",
+         "@typescript/typescript-win32-arm64": "7.0.2",
+         "@typescript/typescript-win32-x64": "7.0.2"
+       }
+     },
+     "node_modules/undici-types": {
+-      "version": "8.9.0",
+-      "resolved": "https://registry.npmjs.org/undici-types/-/undici-types-8.9.0.tgz",
+-      "integrity": "sha512-KTDyRTYX8sWmKXAikPHHSyc63CRPETMctyjKFupcC6OBLXT3xsN0e9aF7m+mIXutFWpUXuedtowG7iLOzp0kQg==",
++      "version": "6.21.0",
++      "resolved": "https://registry.npmjs.org/undici-types/-/undici-types-6.21.0.tgz",
++      "integrity": "sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==",
+       "dev": true,
+       "license": "MIT"
+     },
+     "node_modules/vite": {
+       "version": "8.3.4",
+       "resolved": "https://registry.npmjs.org/vite/-/vite-8.3.4.tgz",
+       "integrity": "sha512-IftLE8phJhdNRIGNEV4JCCvfNScoZQVfcXaN8TQropWGJtOHcu+iAB9pHcuGvmEb/kddw0LBe/jS8ztdC6xdiQ==",
+       "dev": true,
+       "license": "MIT",
+       "peer": true,
+diff --git a/package.json b/package.json
+index 9a75648..3508ae1 100644
+--- a/package.json
++++ b/package.json
+@@ -8,15 +8,15 @@
+   },
+   "scripts": {
+     "test": "TZ=UTC vitest run && TZ=Pacific/Chatham vitest run && TZ=America/Los_Angeles vitest run",
+     "typecheck": "tsc"
+   },
+   "repository": {
+     "type": "git",
+     "url": "git+https://github.com/shreyasx/appointment-bookings.git"
+   },
+   "devDependencies": {
+-    "@types/node": "^26.6.5",
++    "@types/node": "^22.20.5",
+     "typescript": "^7.0.2",
+     "vitest": "^5.0.5"
+   }
+ }
+diff --git a/src/shared/time.ts b/src/shared/time.ts
+index e2ba309..be51d0e 100644
+--- a/src/shared/time.ts
++++ b/src/shared/time.ts
+@@ -1,19 +1,20 @@
+ // ponytail: Intl only; swap for Temporal.ZonedDateTime once Node and Safari ship it
+ 
+ const formatters = new Map<string, Intl.DateTimeFormat>();
+ 
+ // Slot building calls these hundreds of times per request, so formatters are built once per locale, zone and options.
+ function formatter(locale: string, timeZone: string, options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+   const key = `${locale}|${timeZone}|${JSON.stringify(options)}`;
+   let f = formatters.get(key);
+   if (!f) {
++    if (formatters.size > 500) formatters.clear(); // ponytail: clear-all past 500 entries; an LRU if real zones ever churn
+     f = new Intl.DateTimeFormat(locale, { ...options, timeZone });
+     formatters.set(key, f);
+   }
+   return f;
+ }
+ 
+ // ICU accepts "IST" and maps it to India, so a zone without a "/" is only valid as "UTC" (spec §7 rule 8).
+ export function isValidTimeZone(tz: string): boolean {
+   if (tz !== 'UTC' && !tz.includes('/')) return false;
+   try {

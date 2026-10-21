@@ -1,0 +1,238 @@
+# Review package: 30bc1f2..4efcab8b73c346741972ec00a477660f416f50ef
+
+## Commits
+4efcab8 feat(email): render parent and mentor emails in each side's own zone
+
+## Files changed
+ package-lock.json        | 21 ++++++++++++++++++
+ package.json             |  2 ++
+ src/server/email.test.ts | 40 ++++++++++++++++++++++++++++++++++
+ src/server/email.ts      | 56 ++++++++++++++++++++++++++++++++++++++++++++++++
+ 4 files changed, 119 insertions(+)
+
+## Diff
+diff --git a/package-lock.json b/package-lock.json
+index 2966be9..b1f1d8f 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -1,24 +1,26 @@
+ {
+   "name": "appointment-bookings",
+   "version": "1.0.0",
+   "lockfileVersion": 3,
+   "requires": true,
+   "packages": {
+     "": {
+       "name": "appointment-bookings",
+       "version": "1.0.0",
+       "dependencies": {
++        "nodemailer": "^10.1.7",
+         "pg": "^8.23.1"
+       },
+       "devDependencies": {
+         "@types/node": "^22.20.5",
++        "@types/nodemailer": "^8.0.2",
+         "@types/pg": "^8.23.1",
+         "typescript": "^7.0.2",
+         "vitest": "^5.0.5"
+       },
+       "engines": {
+         "node": ">=22.18"
+       }
+     },
+     "node_modules/@jridgewell/resolve-uri": {
+       "version": "3.1.2",
+@@ -365,20 +367,30 @@
+     "node_modules/@types/node": {
+       "version": "22.20.5",
+       "resolved": "https://registry.npmjs.org/@types/node/-/node-22.20.5.tgz",
+       "integrity": "sha512-U2+DNr+wSjpsTS/wZGYHq7GcwfuSmKiKvoPvK22zwTlRhU91yOniN4qRR5KhIjvif7ysw/dz/hKmfDH0Ris4aA==",
+       "dev": true,
+       "license": "MIT",
+       "dependencies": {
+         "undici-types": "~6.21.0"
+       }
+     },
++    "node_modules/@types/nodemailer": {
++      "version": "8.0.2",
++      "resolved": "https://registry.npmjs.org/@types/nodemailer/-/nodemailer-8.0.2.tgz",
++      "integrity": "sha512-c7M5ox8p0nEOfbJ2E9Qcmt8/QCu/VzsiAhzBiZbvky2PhKZDHpKB3sQHBM5MEZNkCfBOaS6S9//AGPRTNB7IaA==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "@types/node": "*"
++      }
++    },
+     "node_modules/@types/pg": {
+       "version": "8.23.1",
+       "resolved": "https://registry.npmjs.org/@types/pg/-/pg-8.23.1.tgz",
+       "integrity": "sha512-fKVHpikPdg4GKks3JuLEhvwSyvwzF23hnabPy6DD8ljVbC7+6J5dQzdv4arV6jqq57djnMgs1HKBxX4P8aBI3A==",
+       "dev": true,
+       "license": "MIT",
+       "dependencies": {
+         "@types/node": "*",
+         "pg-protocol": "*",
+         "pg-types": "^2.2.0"
+@@ -1150,20 +1162,29 @@
+       ],
+       "license": "MIT",
+       "peer": true,
+       "bin": {
+         "nanoid": "bin/nanoid.cjs"
+       },
+       "engines": {
+         "node": "^10 || ^12 || ^13.7 || ^14 || >=15.0.1"
+       }
+     },
++    "node_modules/nodemailer": {
++      "version": "10.1.7",
++      "resolved": "https://registry.npmjs.org/nodemailer/-/nodemailer-10.1.7.tgz",
++      "integrity": "sha512-OQa6FDln5fLttmqSbjDiRYvFDOFNrBqfiOwHPlEbURil3b+vPB1v8xpi+Sp46drzNDlsTnNsS502vthmz56r4w==",
++      "license": "MIT-0",
++      "engines": {
++        "node": ">=20.0.0"
++      }
++    },
+     "node_modules/obug": {
+       "version": "3.0.0",
+       "resolved": "https://registry.npmjs.org/obug/-/obug-3.0.0.tgz",
+       "integrity": "sha512-5vvB5+W7ePv+p3uqxi+RcW1XAzLW0/hxt3/4X4Lc4qHudzOhmBiBwOY6DRob4WnanAEGvNcLjF+KNOufrUoEQw==",
+       "dev": true,
+       "funding": [
+         "https://github.com/sponsors/sxzz",
+         "https://opencollective.com/debug"
+       ],
+       "license": "MIT",
+diff --git a/package.json b/package.json
+index 15d0edc..47f685e 100644
+--- a/package.json
++++ b/package.json
+@@ -9,18 +9,20 @@
+   "scripts": {
+     "test": "TZ=UTC vitest run && TZ=Pacific/Chatham vitest run && TZ=America/Los_Angeles vitest run",
+     "typecheck": "tsc"
+   },
+   "repository": {
+     "type": "git",
+     "url": "git+https://github.com/shreyasx/appointment-bookings.git"
+   },
+   "devDependencies": {
+     "@types/node": "^22.20.5",
++    "@types/nodemailer": "^8.0.2",
+     "@types/pg": "^8.23.1",
+     "typescript": "^7.0.2",
+     "vitest": "^5.0.5"
+   },
+   "dependencies": {
++    "nodemailer": "^10.1.7",
+     "pg": "^8.23.1"
+   }
+ }
+diff --git a/src/server/email.test.ts b/src/server/email.test.ts
+new file mode 100644
+index 0000000..22be59a
+--- /dev/null
++++ b/src/server/email.test.ts
+@@ -0,0 +1,40 @@
++import { expect, test } from 'vitest';
++import { renderEmails, type EmailBooking } from './email.ts';
++
++const b: EmailBooking = { id: 'b1', startsAt: new Date('2026-10-27T16:00:00Z'), parentName: 'Asha Patel', parentEmail: 'asha@example.com',
++  childName: 'Rohan', parentTimeZone: 'Europe/London', classLink: 'https://classroom.example/trial/abc',
++  mentor: { name: 'Priya Sharma', email: 'priya.sharma@mentors.example', timeZone: 'Asia/Kolkata' } };
++
++test("the parent's email leads with the parent's time", () => {
++  const { parent } = renderEmails(b, 'http://localhost:3000');
++  expect(parent.to).toBe('asha@example.com');
++  expect(parent.subject).toBe("Rohan's free trial class: Tue 27 Oct, 4:00 PM GMT (London)");
++  expect(parent.text).toContain('When: Tue 27 Oct, 4:00–5:00 PM GMT (London)');
++  expect(parent.text).toContain("Mentor: Priya Sharma, joining from Kolkata, where it's 9:30 PM IST");
++  expect(parent.text).toContain('Class link: https://classroom.example/trial/abc');
++  expect(parent.text).toContain('See your booking: http://localhost:3000/bookings/b1');
++});
++
++test("the mentor's email leads with the mentor's own time", () => {
++  const { mentor } = renderEmails(b, 'http://localhost:3000');
++  expect(mentor.to).toBe('priya.sharma@mentors.example');
++  expect(mentor.subject).toBe('New trial class: Tue 27 Oct, 9:30 PM IST (Kolkata)');
++  expect(mentor.text).toContain('When: Tue 27 Oct, 9:30–10:30 PM IST (Kolkata)');
++  expect(mentor.text).toContain('For the family: 4:00 PM GMT in London');
++  expect(mentor.text).toContain('Child: Rohan');
++  expect(mentor.text).toContain('Parent: Asha Patel');
++});
++
++test('abbreviations follow each side across the clock changes', () => {
++  expect(renderEmails({ ...b, startsAt: new Date('2026-10-23T15:00:00Z') }, '').parent.subject)
++    .toBe("Rohan's free trial class: Fri 23 Oct, 4:00 PM BST (London)");
++  expect(renderEmails({ ...b, parentTimeZone: 'America/New_York', startsAt: new Date('2026-11-03T15:00:00Z') }, '').parent.subject)
++    .toBe("Rohan's free trial class: Tue 3 Nov, 10:00 AM EST (New York)");
++  expect(renderEmails({ ...b, startsAt: new Date('2026-10-23T15:00:00Z') }, '').mentor.text).toContain('For the family: 4:00 PM BST in London');
++});
++
++test("each side sees the other side's date when the days differ", () => {
++  const { parent, mentor } = renderEmails({ ...b, parentTimeZone: 'America/New_York', startsAt: new Date('2026-10-26T21:00:00Z') }, '');
++  expect(parent.text).toContain("Mentor: Priya Sharma, joining from Kolkata, where it's Tue 27 Oct, 2:30 AM IST");
++  expect(mentor.text).toContain('For the family: Mon 26 Oct, 5:00 PM EDT in New York');
++});
+diff --git a/src/server/email.ts b/src/server/email.ts
+new file mode 100644
+index 0000000..6215a68
+--- /dev/null
++++ b/src/server/email.ts
+@@ -0,0 +1,56 @@
++import nodemailer from 'nodemailer';
++import { cityName, formatDate, formatOtherTime, formatSpan, formatWhen } from '../shared/time.ts';
++
++export type EmailMessage = { to: string; subject: string; text: string };
++export type Mailer = { send(message: EmailMessage): Promise<void> };
++export type EmailBooking = { id: string; startsAt: Date; parentName: string; parentEmail: string; childName: string; parentTimeZone: string;
++  classLink: string; mentor: { name: string; email: string; timeZone: string } };
++
++const CLASS_MINUTES = 60;
++const first = (name: string) => name.trim().split(/\s+/)[0] ?? name;
++
++/** One email per side; each leads with its reader's own time and adds the other side's time (with its date when the days differ). */
++export function renderEmails(b: EmailBooking, appUrl: string): { parent: EmailMessage; mentor: EmailMessage } {
++  const start = b.startsAt;
++  const end = new Date(start.getTime() + CLASS_MINUTES * 60_000);
++  const { mentor } = b;
++  const when = (tz: string) => `${formatDate(start, tz)}, ${formatSpan(start, end, tz)}`;
++
++  const parent = [
++    `Hi ${first(b.parentName)},`,
++    '',
++    `${b.childName}'s free trial class is booked.`,
++    '',
++    `When: ${when(b.parentTimeZone)}`,
++    `Mentor: ${mentor.name}, joining from ${cityName(mentor.timeZone)}, where it's ${formatOtherTime(start, mentor.timeZone, b.parentTimeZone)}`,
++    `Class link: ${b.classLink}`,
++    '',
++    `See your booking: ${appUrl}/bookings/${b.id}`,
++  ];
++  const mentorText = [
++    `Hi ${first(mentor.name)},`,
++    '',
++    'You have a new trial class.',
++    '',
++    `When: ${when(mentor.timeZone)}`,
++    `For the family: ${formatOtherTime(start, b.parentTimeZone, mentor.timeZone)} in ${cityName(b.parentTimeZone)}`,
++    `Child: ${b.childName}`,
++    `Parent: ${b.parentName}`,
++    `Class link: ${b.classLink}`,
++  ];
++
++  return {
++    parent: { to: b.parentEmail, subject: `${b.childName}'s free trial class: ${formatWhen(start, b.parentTimeZone)}`, text: parent.join('\n') },
++    mentor: { to: mentor.email, subject: `New trial class: ${formatWhen(start, mentor.timeZone)}`, text: mentorText.join('\n') },
++  };
++}
++
++/** Sends through the given SMTP url. A refused connection rejects; there are no retries. */
++export function createSmtpMailer(smtpUrl: string): Mailer {
++  const transport = nodemailer.createTransport(smtpUrl);
++  return {
++    async send({ to, subject, text }) {
++      await transport.sendMail({ from: 'Codeyoung Trials <trials@codeyoung.example>', to, subject, text });
++    },
++  };
++}
