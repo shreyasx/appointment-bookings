@@ -420,6 +420,26 @@ This is the same rule as Temporal's default disambiguation (`'compatible'`).
 - If the server fails between committing a booking and re-reading it, the client gets a 500 for a booking that exists. The window is tiny.
 - One app instance is assumed. Two instances starting together on an empty database could both pre-book the seed.
 
+## How this was built
+
+Built with Claude Code. The full sessions are in [TRANSCRIPT.md](TRANSCRIPT.md), the design is in [the spec](docs/superpowers/specs/2026-10-20-trial-booking-design.md), and the 14-task build is in [the plan](docs/superpowers/plans/2026-10-21-trial-booking.md).
+
+**Process:** brainstorm → spec → plan → two agents review the plan → a fresh subagent builds each task from the plan, with a reviewer after each → one whole-branch review and one fix round.
+
+**My calls** (the full list is in spec §16, "Decided by the user"):
+
+- Docker Compose with Postgres and Mailpit, so one `docker compose up` migrates, seeds and serves.
+- Express, TypeScript, Zod, React with Vite, TanStack Query and Tailwind, with no date library.
+- Store UTC instants and IANA zone names, and show every time with its abbreviation and city.
+- The system assigns the mentor. Classes are 60 minutes, never overlap, and open 14 days ahead.
+- The cap counts the mentor's own day, and the race test must be able to fail.
+- Email only after commit, and a `DEMO_NOW` demo clock so the DST behaviour shows on any day.
+
+**Codeyoung's own trial flow, and where this differs:**
+
+- Kept: details first, then the time, so a "just taken" retry never means retyping; 12-hour AM/PM times, as in their picker; their font, accent colour, corners and sizes.
+- Changed: a 14-day window instead of their 7, so a window opened on 20 Oct 2026 spans both the UK (25 Oct) and US (1 Nov) clock changes; field borders a little darker, for 3:1 contrast; no marketing content around the form.
+
 ## Project layout
 
 ```
@@ -427,6 +447,7 @@ docker-compose.yml          the stack: db, mailpit, app, and test (under a profi
 Dockerfile                  deps, build, test and runtime stages
 .dockerignore
 .prettierrc.json            Prettier: single quotes, 100 columns
+TRANSCRIPT.md               the full AI-assisted development sessions, added as exported
 package.json                scripts; npm test runs Vitest under three host zones
 tsconfig.json               compiler rules (erasable syntax only)
 vite.config.ts              Vite build, dev proxy for /api, Vitest timeouts
